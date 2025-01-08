@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="AspNetCoreRateLimit" Version="5.0.0" />
+    <PackageReference Include="Otp.NET" Version="1.4.1" />
+    <PackageReference Include="AutoMapper" Version="12.0.1" />
+    <PackageReference Include="Hellang.Middleware.ProblemDetails" Version="6.5.1" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="9.0.10" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="9.0.4" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="9.0.10">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Serilog.AspNetCore" Version="9.0.0" />
+    <PackageReference Include="Serilog.Sinks.Console" Version="6.0.0" />
+    <PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
+    <PackageReference Include="Serilog.Sinks.seq" Version="9.0.0" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="9.0.6" />
+    <PackageReference Include="Swashbuckle.AspNetCore.Filters" Version="9.0.1" />
+    <PackageReference Include="Stripe.net" Version="43.24.0" />
+    <PackageReference Include="Dapper" Version="2.1.15" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ApexBuild.Application\ApexBuild.Application.csproj" />
+    <ProjectReference Include="..\ApexBuild.Infrastructure\ApexBuild.Infrastructure.csproj" />
+  </ItemGroup>
+
+</Project>

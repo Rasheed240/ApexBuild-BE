@@ -1,0 +1,29 @@
+# Build output
+bin/
+obj/
+
+# IDE
+.vs/
+.vscode/
+*.user
+*.suo
+
+# App settings (sensitive)
+appsettings.json
+appsettings.Development.json
+appsettings.Development*.json
+
+# Environment files
+.env
+.env.*
+
+# Logs
+logs/
+*.log
+
+# Documentation archive
+docs/
+
+# OS files
+.DS_Store
+Thumbs.db

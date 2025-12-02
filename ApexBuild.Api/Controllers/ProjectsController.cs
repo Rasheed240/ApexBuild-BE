@@ -12,6 +12,7 @@ using ApexBuild.Application.Features.Projects.Queries.GetProjectProgress;
 using ApexBuild.Application.Features.Projects.Queries.GetTopProjectProgress;
 using ApexBuild.Application.Features.Tasks.Queries.GetProjectTasks;
 using ApexBuild.Application.Features.Tasks.Queries.GetPendingTaskUpdates;
+using ApexBuild.Application.Features.Projects.Queries.GetProjectMembers;
 using ApexBuild.Application.Features.Tasks.Commands.ReviewTaskUpdate;
 using ApexBuild.Contracts.Responses;
 using ApexBuild.Domain.Enums;
@@ -145,12 +146,16 @@ namespace ApexBuild.Api.Controllers
         }
 
         /// <summary>
-        /// Get top N project progress computed from tasks
+        /// Get top N project progress computed from tasks. Count must be between 1 and 100.
         /// </summary>
         [HttpGet("progress/top")]
         [ProducesResponseType(typeof(ApiResponse<GetTopProjectProgressResponse>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status400BadRequest)]
         public async Task<ActionResult<ApiResponse<GetTopProjectProgressResponse>>> GetTopProjectProgress([FromQuery] int count = 3)
         {
+            if (count < 1 || count > 100)
+                return BadRequest(ApiResponse.Failure<object>("Count must be between 1 and 100"));
+
             var query = new ApexBuild.Application.Features.Projects.Queries.GetTopProjectProgress.GetTopProjectProgressQuery(count);
             var response = await _mediator.Send(query);
             return Ok(ApiResponse.Success(response, "Project progress retrieved successfully"));
@@ -167,6 +172,31 @@ namespace ApexBuild.Api.Controllers
             var query = new GetProjectProgressQuery(projectId);
             var response = await _mediator.Send(query);
             return Ok(ApiResponse.Success(response, "Project progress retrieved successfully"));
+        }
+
+        /// <summary>
+        /// Get all members (WorkInfo) for a project
+        /// </summary>
+        [HttpGet("{projectId}/members")]
+        [ProducesResponseType(typeof(ApiResponse<GetProjectMembersResponse>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status404NotFound)]
+        public async Task<ActionResult<ApiResponse<GetProjectMembersResponse>>> GetProjectMembers(
+            Guid projectId,
+            [FromQuery] string? searchTerm = null,
+            [FromQuery] bool? isActive = null,
+            [FromQuery] int pageNumber = 1,
+            [FromQuery] int pageSize = 50)
+        {
+            var query = new GetProjectMembersQuery
+            {
+                ProjectId = projectId,
+                SearchTerm = searchTerm,
+                IsActive = isActive,
+                PageNumber = pageNumber,
+                PageSize = pageSize,
+            };
+            var response = await _mediator.Send(query);
+            return Ok(ApiResponse.Success(response, "Project members retrieved successfully"));
         }
 
         /// <summary>
@@ -233,7 +263,7 @@ namespace ApexBuild.Api.Controllers
         }
 
         /// <summary>
-        /// Review (approve or reject) a task update
+        /// Review (approve or reject) a task update. Action must be "approve" or "reject".
         /// </summary>
         [HttpPost("tasks/updates/{taskUpdateId}/review")]
         [ProducesResponseType(typeof(ApiResponse<ReviewTaskUpdateResponse>), StatusCodes.Status200OK)]
@@ -243,10 +273,18 @@ namespace ApexBuild.Api.Controllers
             [FromRoute] Guid taskUpdateId,
             [FromBody] ReviewTaskUpdateRequest request)
         {
+            if (request == null)
+                return BadRequest(ApiResponse.Failure<object>("Request body is required"));
+
+            if (string.IsNullOrWhiteSpace(request.Action))
+                return BadRequest(ApiResponse.Failure<object>("Action is required (must be 'approve' or 'reject')"));
+
+            var action = request.Action.ToLowerInvariant() == "approve" ? ReviewAction.Approve : ReviewAction.Reject;
+
             var command = new ReviewTaskUpdateCommand
             {
                 TaskUpdateId = taskUpdateId,
-                Action = request.Action == "approve" ? ReviewAction.Approve : ReviewAction.Reject,
+                Action = action,
                 ReviewNotes = request.ReviewNotes ?? "",
                 AdjustedProgressPercentage = request.AdjustedProgressPercentage
             };

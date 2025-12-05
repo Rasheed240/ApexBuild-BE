@@ -14,6 +14,7 @@ using ApexBuild.Application.Features.Tasks.Queries.GetTaskById;
 using ApexBuild.Application.Features.Tasks.Queries.ListTasks;
 using ApexBuild.Application.Features.Tasks.Queries.GetMyTasks;
 using ApexBuild.Application.Features.Tasks.Queries.GetTaskComments;
+using ApexBuild.Application.Features.Tasks.Queries.GetPendingUpdates;
 using ApexBuild.Contracts.Responses;
 using ApexBuild.Domain.Enums;
 using TaskStatus = ApexBuild.Domain.Enums.TaskStatus;
@@ -29,7 +30,7 @@ public class TasksController : ControllerBase
 
     public TasksController(IMediator mediator)
     {
-        _mediator = mediator;
+        _mediator = mediator ?? throw new ArgumentNullException(nameof(mediator));
     }
 
     /// <summary>
@@ -49,13 +50,37 @@ public class TasksController : ControllerBase
     }
 
     /// <summary>
+    /// Get task updates pending review for the current user role within an organization
+    /// </summary>
+    [HttpGet("pending-updates")]
+    [ProducesResponseType(typeof(ApiResponse<GetPendingUpdatesResponse>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<ApiResponse<GetPendingUpdatesResponse>>> GetPendingUpdates(
+        [FromQuery] Guid organizationId,
+        [FromQuery] int pageNumber = 1,
+        [FromQuery] int pageSize = 20)
+    {
+        var query = new GetPendingUpdatesQuery
+        {
+            OrganizationId = organizationId,
+            PageNumber = pageNumber,
+            PageSize = pageSize,
+        };
+        var response = await _mediator.Send(query);
+        return Ok(ApiResponse.Success(response, "Pending updates retrieved successfully"));
+    }
+
+    /// <summary>
     /// Get a task by ID
     /// </summary>
     [HttpGet("{taskId}")]
     [ProducesResponseType(typeof(ApiResponse<GetTaskByIdResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<ApiResponse<GetTaskByIdResponse>>> GetTaskById(Guid taskId)
     {
+        if (taskId == Guid.Empty)
+            return BadRequest(ApiResponse.Failure<object>("Task ID cannot be empty"));
+
         var query = new GetTaskByIdQuery { TaskId = taskId };
         var response = await _mediator.Send(query);
         return Ok(ApiResponse.Success(response, "Task retrieved successfully"));
@@ -93,10 +118,11 @@ public class TasksController : ControllerBase
     }
 
     /// <summary>
-    /// List tasks with pagination and filtering
+    /// List tasks with pagination and filtering. Page size max is 100.
     /// </summary>
     [HttpGet]
     [ProducesResponseType(typeof(ApiResponse<ListTasksResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<ApiResponse<ListTasksResponse>>> ListTasks(
         [FromQuery] int pageNumber = 1,
         [FromQuery] int pageSize = 10,
@@ -107,6 +133,13 @@ public class TasksController : ControllerBase
         [FromQuery] Guid? parentTaskId = null,
         [FromQuery] string? searchTerm = null)
     {
+        if (pageNumber < 1)
+            return BadRequest(ApiResponse.Failure<object>("Page number must be 1 or greater"));
+        if (pageSize < 1 || pageSize > 100)
+            return BadRequest(ApiResponse.Failure<object>("Page size must be between 1 and 100"));
+        if (priority.HasValue && (priority.Value < 1 || priority.Value > 4))
+            return BadRequest(ApiResponse.Failure<object>("Priority must be between 1 (Low) and 4 (Critical)"));
+
         var query = new ListTasksQuery
         {
             PageNumber = pageNumber,

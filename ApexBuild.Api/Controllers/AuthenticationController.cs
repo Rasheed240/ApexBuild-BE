@@ -26,8 +26,8 @@ namespace ApexBuild.Api.Controllers
 
         public AuthenticationController(IMediator mediator, IUnitOfWork unitOfWork)
         {
-            _mediator = mediator;
-            _unitOfWork = unitOfWork;
+            _mediator = mediator ?? throw new ArgumentNullException(nameof(mediator));
+            _unitOfWork = unitOfWork ?? throw new ArgumentNullException(nameof(unitOfWork));
         }
 
         /// <summary>
@@ -120,11 +120,15 @@ namespace ApexBuild.Api.Controllers
 
             if (string.IsNullOrEmpty(userId))
             {
-                return Unauthorized(ApiResponse.Failure<object>("User not authenticated"));
+                return Unauthorized(ApiResponse.Failure<object>("User identity not found in token"));
+            }
+
+            if (!Guid.TryParse(userId, out var userGuid))
+            {
+                return BadRequest(ApiResponse.Failure<object>("Invalid user ID format in token"));
             }
 
             // Get full user details from database
-            var userGuid = Guid.Parse(userId);
             var user = await _unitOfWork.Users.GetByIdAsync(userGuid);
 
             if (user == null)

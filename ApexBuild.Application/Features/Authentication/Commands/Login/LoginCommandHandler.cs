@@ -10,6 +10,11 @@ namespace ApexBuild.Application.Features.Authentication.Commands.Login
 {
     public class LoginCommandHandler : IRequestHandler<LoginCommand, LoginResponse>
     {
+        private const int MaxFailedLoginAttempts = 5;
+        private const int AccountLockoutMinutes = 30;
+        private const int RefreshTokenExpiryDays = 7;
+        private const int AccessTokenExpiryHours = 24;
+
         private readonly IUnitOfWork _unitOfWork;
         private readonly IPasswordHasher _passwordHasher;
         private readonly IJwtTokenService _jwtTokenService;
@@ -46,9 +51,9 @@ namespace ApexBuild.Application.Features.Authentication.Commands.Login
         {
             user.FailedLoginAttempts++;
 
-            if (user.FailedLoginAttempts >= 5)
+            if (user.FailedLoginAttempts >= MaxFailedLoginAttempts)
             {
-                user.LockedOutUntil = DateTime.UtcNow.AddMinutes(30);
+                user.LockedOutUntil = DateTime.UtcNow.AddMinutes(AccountLockoutMinutes);
             }
 
             await _unitOfWork.SaveChangesAsync(cancellationToken);
@@ -101,7 +106,7 @@ namespace ApexBuild.Application.Features.Authentication.Commands.Login
         var refreshToken = _jwtTokenService.GenerateRefreshToken();
 
         user.RefreshToken = refreshToken;
-        user.RefreshTokenExpiry = DateTime.UtcNow.AddDays(7);
+        user.RefreshTokenExpiry = DateTime.UtcNow.AddDays(RefreshTokenExpiryDays);
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
@@ -123,7 +128,7 @@ namespace ApexBuild.Application.Features.Authentication.Commands.Login
         {
             AccessToken = accessToken,
             RefreshToken = refreshToken,
-            ExpiresAt = DateTime.UtcNow.AddHours(24),
+            ExpiresAt = DateTime.UtcNow.AddHours(AccessTokenExpiryHours),
             User = new UserDto
             {
                 Id = user.Id,

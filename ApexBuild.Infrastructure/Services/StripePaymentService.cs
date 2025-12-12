@@ -35,6 +35,13 @@ namespace ApexBuild.Infrastructure.Services
 
         public async Task<string> CreateCustomerAsync(Organization organization, string email, string name)
         {
+            if (organization == null)
+                throw new ArgumentNullException(nameof(organization), "Organization cannot be null");
+            if (string.IsNullOrWhiteSpace(email))
+                throw new ArgumentException("Email cannot be empty", nameof(email));
+            if (string.IsNullOrWhiteSpace(name))
+                throw new ArgumentException("Customer name cannot be empty", nameof(name));
+
             try
             {
                 var options = new CustomerCreateOptions
@@ -205,6 +212,15 @@ namespace ApexBuild.Infrastructure.Services
             string description,
             string paymentMethodId = null)
         {
+            if (string.IsNullOrWhiteSpace(customerId))
+                return (false, null, "Customer ID cannot be empty");
+            if (amount <= 0)
+                return (false, null, "Amount must be greater than 0");
+            if (string.IsNullOrWhiteSpace(currency) || currency.Length != 3)
+                return (false, null, "Currency must be a valid 3-letter ISO code");
+            if (string.IsNullOrWhiteSpace(description))
+                return (false, null, "Description is required");
+
             try
             {
                 var amountInCents = (long)(amount * 100);

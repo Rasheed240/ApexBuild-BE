@@ -12,6 +12,10 @@ namespace ApexBuild.Infrastructure.Services
 {
     public class EmailService : IEmailService
     {
+        private const string SubjectConfirmation = "Confirm Your Email Address - ApexBuild";
+        private const string SubjectPasswordReset = "Reset Your Password - ApexBuild";
+        private const string SubjectDailyReminder = "Daily Work Update Reminder - ApexBuild";
+
         private readonly IConfiguration _configuration;
         private readonly IRazorLightEngine _razorEngine;
 
@@ -26,6 +30,13 @@ namespace ApexBuild.Infrastructure.Services
 
         public async Task SendEmailAsync(string to, string subject, string body, bool isHtml = true)
         {
+            if (string.IsNullOrWhiteSpace(to))
+                throw new ArgumentException("Recipient email address cannot be empty", nameof(to));
+            if (string.IsNullOrWhiteSpace(subject))
+                throw new ArgumentException("Email subject cannot be empty", nameof(subject));
+            if (string.IsNullOrWhiteSpace(body))
+                throw new ArgumentException("Email body cannot be empty", nameof(body));
+
             var useSendGrid = _configuration.GetValue<bool>("Email:UseSendGrid");
 
             if (useSendGrid)
@@ -81,14 +92,14 @@ namespace ApexBuild.Infrastructure.Services
         {
             var confirmUrl = $"{_configuration["App:BaseUrl"]}/auth/confirm-email?token={confirmationToken}";
             var body = EmailTemplates.GetEmailConfirmationTemplate(fullName, confirmUrl);
-            await SendEmailAsync(email, "Confirm Your Email Address - ApexBuild", body);
+            await SendEmailAsync(email, SubjectConfirmation, body);
         }
 
         public async Task SendPasswordResetAsync(string email, string fullName, string resetToken)
         {
             var resetUrl = $"{_configuration["App:BaseUrl"]}/auth/reset-password?token={resetToken}";
             var body = EmailTemplates.GetPasswordResetTemplate(fullName, resetUrl);
-            await SendEmailAsync(email, "Reset Your Password - ApexBuild", body);
+            await SendEmailAsync(email, SubjectPasswordReset, body);
         }
 
         public async Task SendInvitationAsync(string email, string inviterName, string roleName, string? projectName, string invitationUrl, string? message)
@@ -125,7 +136,7 @@ namespace ApexBuild.Infrastructure.Services
         public async Task SendDailyUpdateReminderAsync(string email, string fullName, int taskCount, string tasksList)
         {
             var body = EmailTemplates.GetDailyUpdateReminderTemplate(fullName, taskCount, tasksList, _configuration["App:BaseUrl"] ?? "");
-            await SendEmailAsync(email, "Daily Work Update Reminder - ApexBuild", body);
+            await SendEmailAsync(email, SubjectDailyReminder, body);
         }
 
         public async Task SendWeeklyProgressReportAsync(

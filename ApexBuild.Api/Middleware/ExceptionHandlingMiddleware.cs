@@ -9,6 +9,11 @@ namespace ApexBuild.Api.Middleware;
 
 public class ExceptionHandlingMiddleware
 {
+    private const string SwaggerPath = "/swagger";
+    private const string OpenApiPath = "/openapi";
+    private const string HangfirePath = "/hangfire";
+    private const string ContentTypeJson = "application/json";
+
     private readonly RequestDelegate _next;
     private readonly ILogger<ExceptionHandlingMiddleware> _logger;
 
@@ -20,9 +25,9 @@ public class ExceptionHandlingMiddleware
 
     public async Task InvokeAsync(HttpContext context)
     {
-        if (context.Request.Path.StartsWithSegments("/swagger") ||
-            context.Request.Path.StartsWithSegments("/openapi") ||
-            context.Request.Path.StartsWithSegments("/hangfire"))
+        if (context.Request.Path.StartsWithSegments(SwaggerPath) ||
+            context.Request.Path.StartsWithSegments(OpenApiPath) ||
+            context.Request.Path.StartsWithSegments(HangfirePath))
         {
             await _next(context);
             return;
@@ -55,7 +60,7 @@ public class ExceptionHandlingMiddleware
         }
 
         var response = context.Response;
-        response.ContentType = "application/json";
+        response.ContentType = ContentTypeJson;
 
         var responseModel = ApiResponse.Failure<object>(exception.Message);
 
@@ -70,7 +75,8 @@ public class ExceptionHandlingMiddleware
                         g => g.Select(e => e.ErrorMessage).ToArray()
                     );
                 responseModel.Message = "Validation failed";
-                _logger.LogWarning(exception, "Validation error occurred");
+                var errorCount = validationException.Errors.Count;
+                _logger.LogWarning(exception, "Validation error with {ErrorCount} violation(s)", errorCount);
                 break;
 
             case NotFoundException:

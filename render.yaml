@@ -1,0 +1,79 @@
+# Render Blueprint for ApexBuild Backend
+# This file allows you to deploy your service using Infrastructure as Code
+# Usage: render blueprint deploy -f render.yaml
+
+services:
+  - type: web
+    name: apexbuild-api
+    runtime: docker
+    repo: https://github.com/your-username/your-repo.git # UPDATE THIS
+    branch: master
+    rootDir: src
+    dockerfilePath: ./Dockerfile
+    dockerContext: ./
+    region: oregon # Options: oregon, frankfurt, singapore, ohio
+    plan: starter # Options: free, starter, standard, pro
+    healthCheckPath: /health
+    envVars:
+      - key: ASPNETCORE_ENVIRONMENT
+        value: Production
+      - key: ASPNETCORE_URLS
+        value: http://+:8080
+      - key: ConnectionStrings__DefaultConnection
+        sync: false # Set to true to sync from Render dashboard
+      - key: ConnectionStrings__HangfireConnection
+        sync: false
+      - key: Jwt__SecretKey
+        generateValue: true # Render will auto-generate secure secret
+      - key: Jwt__Issuer
+        value: ApexBuild
+      - key: Jwt__Audience
+        value: ApexBuildUsers
+      - key: Jwt__ExpiryInHours
+        value: 24
+      - key: Jwt__RefreshTokenExpiryInDays
+        value: 7
+      - key: Cloudinary__CloudName
+        sync: false
+      - key: Cloudinary__ApiKey
+        sync: false
+      - key: Cloudinary__ApiSecret
+        sync: false
+      - key: Smtp__Host
+        value: smtp.gmail.com
+      - key: Smtp__Port
+        value: 587
+      - key: Smtp__Username
+        sync: false
+      - key: Smtp__Password
+        sync: false
+      - key: Email__UseSendGrid
+        value: false
+      - key: Email__FromAddress
+        value: noreply@apexbuild.com
+      - key: Email__FromName
+        value: ApexBuild
+      - key: App__BaseUrl
+        value: https://apexbuild-api.onrender.com # UPDATE after deployment
+      - key: App__FrontendUrl
+        sync: false # Set in dashboard
+      - key: Cors__AllowedOrigins__0
+        sync: false # Set in dashboard
+      - key: Cors__AllowedOrigins__1
+        value: http://localhost:5173
+    autoDeploy: true # Auto-deploy on git push
+    buildFilter:
+      paths:
+        - src/**
+      ignoredPaths:
+        - src/ApexBuild.Tests/**
+        - '**/*.md'
+
+# Optional: PostgreSQL Database (if not using external Aiven)
+# databases:
+#   - name: apexbuild-db
+#     databaseName: apexbuild
+#     user: apexbuild
+#     region: oregon
+#     plan: starter # $7/month for 256MB RAM
+#     ipAllowList: [] # Empty = allow all

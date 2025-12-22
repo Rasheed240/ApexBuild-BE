@@ -9,6 +9,12 @@ namespace ApexBuild.Application.Features.Tasks.Commands.UpdateTask;
 
 public class UpdateTaskCommandHandler : IRequestHandler<UpdateTaskCommand, UpdateTaskResponse>
 {
+    private const int PriorityMin = 1;
+    private const int PriorityMax = 4;
+    private const decimal ProgressMin = 0;
+    private const decimal ProgressMax = 100;
+    private const decimal AutoCompleteProgress = 100m;
+
     private readonly IUnitOfWork _unitOfWork;
     private readonly ICurrentUserService _currentUserService;
     private readonly IDateTimeService _dateTimeService;
@@ -120,7 +126,7 @@ public class UpdateTaskCommandHandler : IRequestHandler<UpdateTaskCommand, Updat
 
         if (request.Priority.HasValue)
         {
-            if (request.Priority.Value < 1 || request.Priority.Value > 4)
+            if (request.Priority.Value < PriorityMin || request.Priority.Value > PriorityMax)
                 throw new BadRequestException("Priority must be between 1 (Low) and 4 (Critical)");
             task.Priority = request.Priority.Value;
         }
@@ -151,7 +157,7 @@ public class UpdateTaskCommandHandler : IRequestHandler<UpdateTaskCommand, Updat
 
         if (request.Progress.HasValue)
         {
-            if (request.Progress.Value < 0 || request.Progress.Value > 100)
+            if (request.Progress.Value < ProgressMin || request.Progress.Value > ProgressMax)
                 throw new BadRequestException("Progress must be between 0 and 100");
             task.Progress = request.Progress.Value;
         }
@@ -163,12 +169,12 @@ public class UpdateTaskCommandHandler : IRequestHandler<UpdateTaskCommand, Updat
             task.Tags = request.Tags;
 
         // Auto-complete task if progress is 100%
-        if (task.Progress >= 100 && task.Status != TaskStatus.Completed)
+        if (task.Progress >= AutoCompleteProgress && task.Status != TaskStatus.Completed)
         {
             task.Status = TaskStatus.Completed;
             task.CompletedAt = DateTime.UtcNow;
         }
-        else if (task.Progress < 100 && task.Status == TaskStatus.Completed)
+        else if (task.Progress < AutoCompleteProgress && task.Status == TaskStatus.Completed)
         {
             task.Status = TaskStatus.InProgress;
             task.CompletedAt = null;

@@ -19,15 +19,20 @@ namespace ApexBuild.Api.Controllers
 
         public PaymentsController(IUnitOfWork unitOfWork)
         {
-            _unitOfWork = unitOfWork;
+            _unitOfWork = unitOfWork ?? throw new ArgumentNullException(nameof(unitOfWork));
         }
 
         /// <summary>
         /// Get payment history for an organization.
         /// </summary>
         [HttpGet("organization/{organizationId}")]
+        [ProducesResponseType(typeof(List<PaymentTransactionDto>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(object), StatusCodes.Status400BadRequest)]
         public async Task<ActionResult<List<PaymentTransactionDto>>> GetOrganizationPaymentHistory(Guid organizationId)
         {
+            if (organizationId == Guid.Empty)
+                return BadRequest(new { message = "Organization ID cannot be empty" });
+
             var transactions = await _unitOfWork.PaymentTransactions.GetByOrganizationIdAsync(organizationId);
 
             var dtos = transactions.Select(t => new PaymentTransactionDto
@@ -79,16 +84,25 @@ namespace ApexBuild.Api.Controllers
         }
 
         /// <summary>
-        /// Get revenue statistics for a period.
+        /// Get revenue statistics for a period. Max date range is 365 days.
         /// </summary>
         [HttpGet("revenue")]
+        [ProducesResponseType(typeof(RevenueStatsDto), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(object), StatusCodes.Status400BadRequest)]
         public async Task<ActionResult<RevenueStatsDto>> GetRevenueStats(
             [FromQuery] DateTime startDate,
             [FromQuery] DateTime endDate)
         {
+            const int maxDateRangeDays = 365;
+
             if (endDate <= startDate)
             {
-                return BadRequest("End date must be after start date");
+                return BadRequest(new { message = "End date must be after start date" });
+            }
+
+            if ((endDate - startDate).Days > maxDateRangeDays)
+            {
+                return BadRequest(new { message = $"Date range cannot exceed {maxDateRangeDays} days" });
             }
 
             var totalRevenue = await _unitOfWork.PaymentTransactions

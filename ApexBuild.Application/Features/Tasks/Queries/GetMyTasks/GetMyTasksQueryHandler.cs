@@ -47,6 +47,13 @@ public class GetMyTasksQueryHandler : IRequestHandler<GetMyTasksQuery, GetMyTask
             };
         }
 
+        var now = DateTime.UtcNow;
+        var nonCompletedStatuses = new[]
+        {
+            ApexBuild.Domain.Enums.TaskStatus.Completed,
+            ApexBuild.Domain.Enums.TaskStatus.Cancelled,
+        };
+
         // Build predicate for tasks assigned to current user (exclude subtasks)
         Expression<Func<ProjectTask, bool>> predicate = t =>
             !t.IsDeleted &&
@@ -54,6 +61,8 @@ public class GetMyTasksQueryHandler : IRequestHandler<GetMyTasksQuery, GetMyTask
             !t.ParentTaskId.HasValue &&
             (!request.Status.HasValue || t.Status == request.Status.Value) &&
             (!request.Priority.HasValue || t.Priority == request.Priority.Value) &&
+            (!request.IsOverdue.HasValue || !request.IsOverdue.Value ||
+                (t.DueDate.HasValue && t.DueDate.Value < now && !nonCompletedStatuses.Contains(t.Status))) &&
             (string.IsNullOrWhiteSpace(request.SearchTerm) ||
              t.Title.ToLower().Contains(request.SearchTerm!.Trim().ToLower()) ||
              (t.Description != null && t.Description.ToLower().Contains(request.SearchTerm.Trim().ToLower())) ||

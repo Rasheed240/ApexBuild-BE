@@ -30,4 +30,8 @@ public class PendingUpdateDto
     public string? ContractorAdminFeedback { get; set; }
     public bool? SupervisorApproved { get; set; }
     public string? SupervisorFeedback { get; set; }
+    public bool? AdminApproved { get; set; }
+    public string? AdminFeedback { get; set; }
+    // True when the list represents the current user's own submitted updates (FieldWorker view)
+    public bool IsOwnUpdate { get; set; }
 }

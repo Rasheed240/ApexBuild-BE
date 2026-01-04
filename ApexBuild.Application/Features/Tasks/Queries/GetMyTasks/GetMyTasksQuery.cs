@@ -10,6 +10,7 @@ public record GetMyTasksQuery : IRequest<GetMyTasksResponse>
     public TaskStatus? Status { get; init; }
     public int? Priority { get; init; }
     public string? SearchTerm { get; init; }
+    public bool? IsOverdue { get; init; }
     public int PageNumber { get; init; } = 1;
     public int PageSize { get; init; } = 20;
 }

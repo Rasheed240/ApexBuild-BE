@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.2.0" />
+    <PackageReference Include="xunit" Version="2.5.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.5.3" />
+    <PackageReference Include="Moq" Version="4.20.0" />
+    <PackageReference Include="FluentAssertions" Version="6.11.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ApexBuild.Application\ApexBuild.Application.csproj" />
+    <ProjectReference Include="..\ApexBuild.Api\ApexBuild.Api.csproj" />
+    <ProjectReference Include="..\ApexBuild.Infrastructure\ApexBuild.Infrastructure.csproj" />
+  </ItemGroup>
+
+</Project>

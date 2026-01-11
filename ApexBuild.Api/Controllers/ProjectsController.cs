@@ -151,12 +151,12 @@ namespace ApexBuild.Api.Controllers
         [HttpGet("progress/top")]
         [ProducesResponseType(typeof(ApiResponse<GetTopProjectProgressResponse>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status400BadRequest)]
-        public async Task<ActionResult<ApiResponse<GetTopProjectProgressResponse>>> GetTopProjectProgress([FromQuery] int count = 3)
+        public async Task<ActionResult<ApiResponse<GetTopProjectProgressResponse>>> GetTopProjectProgress([FromQuery] int count = 3, [FromQuery] Guid? organizationId = null)
         {
             if (count < 1 || count > 100)
                 return BadRequest(ApiResponse.Failure<object>("Count must be between 1 and 100"));
 
-            var query = new ApexBuild.Application.Features.Projects.Queries.GetTopProjectProgress.GetTopProjectProgressQuery(count);
+            var query = new ApexBuild.Application.Features.Projects.Queries.GetTopProjectProgress.GetTopProjectProgressQuery(count, organizationId);
             var response = await _mediator.Send(query);
             return Ok(ApiResponse.Success(response, "Project progress retrieved successfully"));
         }

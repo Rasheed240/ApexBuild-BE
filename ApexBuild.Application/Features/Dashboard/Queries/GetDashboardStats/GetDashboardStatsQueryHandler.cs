@@ -140,14 +140,39 @@ namespace ApexBuild.Application.Features.Dashboard.Queries.GetDashboardStats
                 ? await _unitOfWork.Tasks.CountAsync(t => orgProjectIds.Contains(t.ProjectId), cancellationToken)
                 : await _unitOfWork.Tasks.CountAsync(t => true, cancellationToken);
 
+            var overdueTasks = orgProjectIds.Any()
+                ? await _unitOfWork.Tasks.CountAsync(t => t.DueDate != null && t.DueDate < now && t.Status != TaskStatus.Completed && t.Status != TaskStatus.Cancelled && orgProjectIds.Contains(t.ProjectId), cancellationToken)
+                : await _unitOfWork.Tasks.CountAsync(t => t.DueDate != null && t.DueDate < now && t.Status != TaskStatus.Completed && t.Status != TaskStatus.Cancelled, cancellationToken);
+
+            var inProgressTasks = orgProjectIds.Any()
+                ? await _unitOfWork.Tasks.CountAsync(t => t.Status == TaskStatus.InProgress && orgProjectIds.Contains(t.ProjectId), cancellationToken)
+                : await _unitOfWork.Tasks.CountAsync(t => t.Status == TaskStatus.InProgress, cancellationToken);
+
+            var notStartedTasks = orgProjectIds.Any()
+                ? await _unitOfWork.Tasks.CountAsync(t => t.Status == TaskStatus.NotStarted && orgProjectIds.Contains(t.ProjectId), cancellationToken)
+                : await _unitOfWork.Tasks.CountAsync(t => t.Status == TaskStatus.NotStarted, cancellationToken);
+
+            var underReviewTasks = orgProjectIds.Any()
+                ? await _unitOfWork.Tasks.CountAsync(t => t.Status == TaskStatus.UnderReview && orgProjectIds.Contains(t.ProjectId), cancellationToken)
+                : await _unitOfWork.Tasks.CountAsync(t => t.Status == TaskStatus.UnderReview, cancellationToken);
+
+            var rejectedTasks = orgProjectIds.Any()
+                ? await _unitOfWork.Tasks.CountAsync(t => t.Status == TaskStatus.Rejected && orgProjectIds.Contains(t.ProjectId), cancellationToken)
+                : await _unitOfWork.Tasks.CountAsync(t => t.Status == TaskStatus.Rejected, cancellationToken);
+
             return new GetDashboardStatsResponse
             {
-                ActiveProjects = activeProjects,
-                TeamMembers = teamMembers,
-                CompletedTasks = completedTasks,
+                ActiveProjects    = activeProjects,
+                TeamMembers       = teamMembers,
+                CompletedTasks    = completedTasks,
                 UpcomingDeadlines = upcomingDeadlines,
-                PendingReviews = pendingReviews,
-                TotalTasks = totalTasks
+                PendingReviews    = pendingReviews,
+                TotalTasks        = totalTasks,
+                OverdueTasks      = overdueTasks,
+                InProgressTasks   = inProgressTasks,
+                NotStartedTasks   = notStartedTasks,
+                UnderReviewTasks  = underReviewTasks,
+                RejectedTasks     = rejectedTasks,
             };
         }
     }

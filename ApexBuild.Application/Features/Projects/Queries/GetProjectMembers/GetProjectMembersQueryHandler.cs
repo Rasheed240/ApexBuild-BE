@@ -43,6 +43,16 @@ namespace ApexBuild.Application.Features.Projects.Queries.GetProjectMembers
                 .Include(w => w.Contractor)
                 .ToListAsync(cancellationToken);
 
+            // UserRoles for project-level role names
+            var projectUserRoles = await _unitOfWork.UserRoles.GetAll()
+                .Where(ur => ur.ProjectId == request.ProjectId && ur.IsActive)
+                .Include(ur => ur.Role)
+                .ToListAsync(cancellationToken);
+
+            var roleNameByUser = projectUserRoles
+                .GroupBy(ur => ur.UserId)
+                .ToDictionary(g => g.Key, g => g.First().Role?.Name);
+
             var workInfoByUser = workInfos
                 .GroupBy(w => w.UserId)
                 .ToDictionary(g => g.Key, g => g.ToList());
@@ -105,6 +115,7 @@ namespace ApexBuild.Application.Features.Projects.Queries.GetProjectMembers
                     Responsibilities = wi?.Responsibilities,
                     ReportingTo  = wi?.ReportingTo,
                     PhoneNumber  = pu.User?.PhoneNumber,
+                    RoleName     = roleNameByUser.TryGetValue(pu.UserId, out var rn) ? rn : null,
                 };
             }).ToList();
 

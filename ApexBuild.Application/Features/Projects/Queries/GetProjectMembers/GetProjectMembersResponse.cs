@@ -30,5 +30,6 @@ namespace ApexBuild.Application.Features.Projects.Queries.GetProjectMembers
         public string? Responsibilities { get; set; }
         public string? ReportingTo { get; set; }
         public string? PhoneNumber { get; set; }
+        public string? RoleName { get; set; }
     }
 }

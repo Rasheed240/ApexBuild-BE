@@ -47,6 +47,18 @@ public class GetTaskByIdQueryHandler : IRequestHandler<GetTaskByIdQuery, GetTask
         if (task.MilestoneId.HasValue)
             milestone = await _unitOfWork.Milestones.GetByIdAsync(task.MilestoneId.Value, cancellationToken);
 
+        // Get current user's role in this project
+        string? currentUserProjectRole = null;
+        var userProjectRoles = await _unitOfWork.UserRoles.FindAsync(
+            ur => ur.UserId == currentUserId.Value && ur.ProjectId == department.ProjectId && ur.IsActive,
+            cancellationToken);
+        var userProjectRole = userProjectRoles.FirstOrDefault();
+        if (userProjectRole != null)
+        {
+            var roleEntity = await _unitOfWork.Roles.GetByIdAsync(userProjectRole.RoleId, cancellationToken);
+            currentUserProjectRole = roleEntity?.Name;
+        }
+
         // Get parent task if exists
         var parentTask = task.ParentTaskId.HasValue
             ? await _unitOfWork.Tasks.GetByIdAsync(task.ParentTaskId.Value, cancellationToken)
@@ -122,7 +134,8 @@ public class GetTaskByIdQueryHandler : IRequestHandler<GetTaskByIdQuery, GetTask
             UpdateCount = task.Updates.Count(u => !u.IsDeleted),
             CommentCount = task.Comments.Count(c => !c.IsDeleted),
             CreatedAt = task.CreatedAt,
-            UpdatedAt = task.UpdatedAt
+            UpdatedAt = task.UpdatedAt,
+            CurrentUserProjectRole = currentUserProjectRole
         };
     }
 }

@@ -89,13 +89,26 @@ namespace ApexBuild.Api.Controllers
         [HttpGet("{userId}")]
         [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status404NotFound)]
-        public async Task<ActionResult<ApiResponse<object>>> GetUserById(Guid userId)
+        public async Task<ActionResult<ApiResponse<object>>> GetUserById(Guid userId, [FromQuery] Guid? organizationId, [FromQuery] Guid? projectId)
         {
             var user = await _unitOfWork.Users.GetWithRolesAsync(userId);
 
             if (user == null)
             {
                 throw new ApexBuild.Application.Common.Exceptions.NotFoundException("User", userId);
+            }
+
+            var activeRoles = user.UserRoles.Where(ur => ur.IsActive).AsEnumerable();
+
+            if (projectId.HasValue)
+            {
+                activeRoles = activeRoles.Where(ur => ur.ProjectId == projectId.Value);
+            }
+            else if (organizationId.HasValue)
+            {
+                activeRoles = activeRoles.Where(ur =>
+                    ur.OrganizationId == organizationId.Value ||
+                    ur.Project?.OrganizationId == organizationId.Value);
             }
 
             var userDto = new
@@ -119,7 +132,7 @@ namespace ApexBuild.Api.Controllers
                 user.EmailConfirmed,
                 user.TwoFactorEnabled,
                 user.CreatedAt,
-                Roles = user.UserRoles.Where(ur => ur.IsActive).Select(ur => new
+                Roles = activeRoles.Select(ur => new
                 {
                     ur.RoleId,
                     ur.Role.Name,

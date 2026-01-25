@@ -41,6 +41,9 @@ namespace ApexBuild.Application.Common.Interfaces
         IAuditLogRepository AuditLogs { get; }
         IRepository<DepartmentSupervisor> DepartmentSupervisors { get; }
 
+        // Manuals
+        IRepository<UserManual> UserManuals { get; }
+
         Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
         Task BeginTransactionAsync(CancellationToken cancellationToken = default);
         Task CommitTransactionAsync(CancellationToken cancellationToken = default);

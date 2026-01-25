@@ -52,6 +52,9 @@ namespace ApexBuild.Infrastructure.Persistence
         public DbSet<PasswordHistory> PasswordHistories => Set<PasswordHistory>();
         public DbSet<DepartmentSupervisor> DepartmentSupervisors => Set<DepartmentSupervisor>();
 
+        // ── Manuals ───────────────────────────────────────────────────────────
+        public DbSet<UserManual> UserManuals => Set<UserManual>();
+
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);

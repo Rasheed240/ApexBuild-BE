@@ -50,6 +50,9 @@ namespace ApexBuild.Infrastructure.Repositories
             // Audit & Security
             AuditLogs = new AuditLogRepository(_context);
             DepartmentSupervisors = new BaseRepository<DepartmentSupervisor>(_context);
+
+            // Manuals
+            UserManuals = new BaseRepository<UserManual>(_context);
         }
 
         // Core
@@ -88,6 +91,9 @@ namespace ApexBuild.Infrastructure.Repositories
         // Audit & Security
         public IAuditLogRepository AuditLogs { get; }
         public IRepository<DepartmentSupervisor> DepartmentSupervisors { get; }
+
+        // Manuals
+        public IRepository<UserManual> UserManuals { get; }
 
         public async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
         {

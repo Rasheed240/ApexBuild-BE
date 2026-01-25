@@ -3055,6 +3055,78 @@ namespace ApexBuild.Infrastructure.Migrations
 
                     b.Navigation("WorkInfos");
                 });
+
+            modelBuilder.Entity("ApexBuild.Domain.Entities.UserManual", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("title");
+
+                    b.Property<string>("Version")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("version");
+
+                    b.Property<string>("FileUrl")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("file_url");
+
+                    b.Property<string>("FilePublicId")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("file_public_id");
+
+                    b.Property<long>("FileSizeBytes")
+                        .HasColumnType("bigint")
+                        .HasColumnName("file_size_bytes");
+
+                    b.Property<Guid>("UploadedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("uploaded_by_user_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<Guid?>("LastModifiedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("last_modified_by");
+
+                    b.HasKey("Id")
+                        .HasName("pk_user_manuals");
+
+                    b.HasIndex("UploadedByUserId")
+                        .HasDatabaseName("ix_user_manuals_uploaded_by_user_id");
+
+                    b.ToTable("user_manuals");
+                });
+
+            modelBuilder.Entity("ApexBuild.Domain.Entities.UserManual", b =>
+                {
+                    b.HasOne("ApexBuild.Domain.Entities.User", "UploadedByUser")
+                        .WithMany()
+                        .HasForeignKey("UploadedByUserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_user_manuals_users_uploaded_by_user_id");
+
+                    b.Navigation("UploadedByUser");
+                });
 #pragma warning restore 612, 618
         }
     }

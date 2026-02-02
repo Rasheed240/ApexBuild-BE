@@ -1,74 +1,83 @@
-using System;
-using System.Collections.Generic;
 using ApexBuild.Domain.Common;
 using ApexBuild.Domain.Enums;
 
 namespace ApexBuild.Domain.Entities
 {
     /// <summary>
-    /// Represents an organization's subscription/license.
-    /// Each organization must have an active subscription.
-    /// A user can have different subscriptions in different organizations.
+    /// Represents an organization's subscription to ApexBuild.
+    ///
+    /// Billing model:
+    /// - Flat $20 per active user per month (UserMonthlyRate).
+    /// - Organizations created by a SuperAdmin are free (IsFreePlan = true).
+    /// - Monthly amount is computed as: active project member count × UserMonthlyRate.
+    ///
+    /// Stripe handles actual payment processing. This entity stores the billing state.
     /// </summary>
     public class Subscription : BaseAuditableEntity, ISoftDelete
     {
         public Guid OrganizationId { get; set; }
-        public Guid UserId { get; set; } // Owner/admin who purchased
-        
-        // License Information
-        public int NumberOfLicenses { get; set; } // Total licenses purchased for org
-        public int LicensesUsed { get; set; } // Currently assigned licenses
-        public decimal LicenseCostPerMonth { get; set; } = 10m; // $10 per license
-        public decimal TotalMonthlyAmount => NumberOfLicenses * LicenseCostPerMonth;
-        
+
+        /// <summary>PlatformAdmin / owner who set up billing</summary>
+        public Guid UserId { get; set; }
+
+        // Pricing
+        /// <summary>Flat per-user monthly rate. Default $20.</summary>
+        public decimal UserMonthlyRate { get; set; } = 20m;
+
+        /// <summary>Number of currently active users in the organization's projects</summary>
+        public int ActiveUserCount { get; set; } = 0;
+
+        /// <summary>Computed: ActiveUserCount × UserMonthlyRate</summary>
+        public decimal TotalMonthlyAmount => ActiveUserCount * UserMonthlyRate;
+
+        /// <summary>
+        /// If true, this organization was created by a SuperAdmin and users are not billed.
+        /// </summary>
+        public bool IsFreePlan { get; set; } = false;
+
         // Subscription Status
         public SubscriptionStatus Status { get; set; } = SubscriptionStatus.Active;
         public SubscriptionBillingCycle BillingCycle { get; set; } = SubscriptionBillingCycle.Monthly;
-        
+
         // Billing Period
         public DateTime BillingStartDate { get; set; }
         public DateTime BillingEndDate { get; set; }
         public DateTime? NextBillingDate { get; set; }
         public DateTime? RenewalDate { get; set; }
-        
-        // Stripe Information
-        public string? StripeCustomerId { get; set; } // Stripe customer ID for this organization
-        public string? StripeSubscriptionId { get; set; } // Stripe subscription ID (required for subscriptions)
-        public string? StripeSubscriptionItemId { get; set; } // Stripe subscription item ID for quantity updates
-        public string? StripePriceId { get; set; } // Stripe price ID being used
-        public string? StripePaymentMethodId { get; set; } // Default payment method on file
-        public DateTime? StripeCurrentPeriodStart { get; set; } // From Stripe subscription
-        public DateTime? StripeCurrentPeriodEnd { get; set; } // From Stripe subscription
-        
-        // Payment Information
+
+        // Stripe Integration
+        public string? StripeCustomerId { get; set; }
+        public string? StripeSubscriptionId { get; set; }
+        public string? StripeSubscriptionItemId { get; set; }
+        public string? StripePriceId { get; set; }
+        public string? StripePaymentMethodId { get; set; }
+        public DateTime? StripeCurrentPeriodStart { get; set; }
+        public DateTime? StripeCurrentPeriodEnd { get; set; }
+
+        // Payment
         public bool AutoRenew { get; set; } = true;
-        public decimal Amount { get; set; } // Total subscription amount
-        public DateTime CreatedOn { get; set; } = DateTime.UtcNow;
+        public decimal Amount { get; set; }
         public DateTime? CancelledAt { get; set; }
         public string? CancellationReason { get; set; }
-        
-        // Trial Information
+
+        // Trial
         public bool IsTrialPeriod { get; set; } = false;
         public DateTime? TrialEndDate { get; set; }
-        
-        // Metadata
+
         public Dictionary<string, object>? MetaData { get; set; }
-        
+
         // Soft Delete
         public bool IsDeleted { get; set; } = false;
         public DateTime? DeletedAt { get; set; }
         public Guid? DeletedBy { get; set; }
-        
+
         // Navigation Properties
         public virtual Organization Organization { get; set; } = null!;
         public virtual User User { get; set; } = null!;
-        public virtual ICollection<OrganizationLicense> OrganizationLicenses { get; set; } = new List<OrganizationLicense>();
         public virtual ICollection<PaymentTransaction> PaymentTransactions { get; set; } = new List<PaymentTransaction>();
-        
-        // Computed Properties
-        public int RemainingLicenses => NumberOfLicenses - LicensesUsed;
+
+        // Computed
         public bool IsActive => Status == SubscriptionStatus.Active && BillingEndDate > DateTime.UtcNow;
         public bool HasExpired => BillingEndDate <= DateTime.UtcNow;
-        public bool IsLowOnLicenses => RemainingLicenses < 5; // Alert if less than 5 licenses
     }
 }

@@ -1,32 +1,46 @@
-using System.Linq.Expressions;
-using ApexBuild.Domain.Common;
 using ApexBuild.Domain.Entities;
 
 namespace ApexBuild.Application.Common.Interfaces
 {
     public interface IUnitOfWork : IDisposable, IAsyncDisposable
     {
+        // Core
         IUserRepository Users { get; }
         IRoleRepository Roles { get; }
-        IProjectRepository Projects { get; }
+        IRepository<UserRole> UserRoles { get; }
+
+        // Organization
         IOrganizationRepository Organizations { get; }
         IOrganizationMemberRepository OrganizationMembers { get; }
+
+        // Project & Structure
+        IProjectRepository Projects { get; }
+        IRepository<ProjectUser> ProjectUsers { get; }
         IDepartmentRepository Departments { get; }
+        IContractorRepository Contractors { get; }
+        IProjectMilestoneRepository Milestones { get; }
+
+        // Tasks
         ITaskRepository Tasks { get; }
         ITaskUpdateRepository TaskUpdates { get; }
-        IInvitationRepository Invitations { get; }
-        INotificationRepository Notifications { get; }
-        IAuditLogRepository AuditLogs { get; }
-        ISubscriptionRepository Subscriptions { get; }
-        IOrganizationLicenseRepository OrganizationLicenses { get; }
-        IPaymentTransactionRepository PaymentTransactions { get; }
-        IRepository<UserRole> UserRoles { get; }
-        IRepository<TaskComment> TaskComments { get; }
         IRepository<TaskUser> TaskUsers { get; }
-        IRepository<DepartmentSupervisor> DepartmentSupervisors { get; }
+        IRepository<TaskComment> TaskComments { get; }
+
+        // Work & Invitations
         IRepository<WorkInfo> WorkInfos { get; }
-        IRepository<ProjectUser> ProjectUsers { get; }
-        
+        IInvitationRepository Invitations { get; }
+
+        // Communication
+        INotificationRepository Notifications { get; }
+
+        // Billing
+        ISubscriptionRepository Subscriptions { get; }
+        IPaymentTransactionRepository PaymentTransactions { get; }
+
+        // Audit & Security
+        IAuditLogRepository AuditLogs { get; }
+        IRepository<DepartmentSupervisor> DepartmentSupervisors { get; }
+
         Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
         Task BeginTransactionAsync(CancellationToken cancellationToken = default);
         Task CommitTransactionAsync(CancellationToken cancellationToken = default);

@@ -24,7 +24,7 @@ public class GetOrganizationDepartmentsQueryHandler : IRequestHandler<GetOrganiz
             Name = d.Name,
             Code = d.Code,
             ProjectId = d.ProjectId,
-            OrganizationId = d.OrganizationId,
+            OrganizationId = d.Project?.OrganizationId,
             SupervisorId = d.SupervisorId
         }).ToList();
     }

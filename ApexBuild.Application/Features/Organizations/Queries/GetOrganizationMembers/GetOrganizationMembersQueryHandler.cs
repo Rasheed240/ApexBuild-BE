@@ -36,17 +36,24 @@ namespace ApexBuild.Application.Features.Organizations.Queries.GetOrganizationMe
                 throw new NotFoundException("Organization", request.OrganizationId);
             }
 
-            // Check if current user is a member or owner of the organization
-            var isMember = await _unitOfWork.OrganizationMembers.IsMemberAsync(
-                request.OrganizationId, 
-                currentUserId.Value, 
-                cancellationToken);
-            
-            var isOwner = organization.OwnerId == currentUserId.Value;
+            // Platform admins and super admins can access any organization
+            var isPlatformAdmin = _currentUserService.HasRole("SuperAdmin") ||
+                                  _currentUserService.HasRole("PlatformAdmin");
 
-            if (!isMember && !isOwner)
+            if (!isPlatformAdmin)
             {
-                throw new ForbiddenException("You do not have access to this organization");
+                // Check if current user is a member or owner of the organization
+                var isMember = await _unitOfWork.OrganizationMembers.IsMemberAsync(
+                    request.OrganizationId,
+                    currentUserId.Value,
+                    cancellationToken);
+
+                var isOwner = organization.OwnerId == currentUserId.Value;
+
+                if (!isMember && !isOwner)
+                {
+                    throw new ForbiddenException("You do not have access to this organization");
+                }
             }
 
             // Get all members with user details

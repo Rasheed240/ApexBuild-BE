@@ -23,7 +23,8 @@ public class ListOrganizationsQueryHandler : IRequestHandler<ListOrganizationsQu
     public async Task<ListOrganizationsResponse> Handle(ListOrganizationsQuery request, CancellationToken cancellationToken)
     {
         var currentUserId = _currentUserService.UserId;
-        var isAdmin = _currentUserService.HasRole("SuperAdmin") || _currentUserService.HasRole("PlatformAdmin");
+        // Only SuperAdmin sees all orgs. PlatformAdmin sees only the orgs they own or are a member of.
+        var isAdmin = _currentUserService.HasRole("SuperAdmin");
 
         // Build predicate with all conditions in one expression
         Expression<Func<Organization, bool>> predicate = o => !o.IsDeleted &&

@@ -47,7 +47,7 @@ public class GetProjectsByUserQueryHandler : IRequestHandler<GetProjectsByUserQu
                 Code = p.Code,
                 Description = p.Description,
                 Status = p.Status,
-                ProjectType = p.ProjectType,
+                ProjectType = p.ProjectType.ToString(),
                 StartDate = p.StartDate,
                 ExpectedEndDate = p.ExpectedEndDate,
                 CoverImageUrl = p.CoverImageUrl,
@@ -64,4 +64,3 @@ public class GetProjectsByUserQueryHandler : IRequestHandler<GetProjectsByUserQu
         };
     }
 }
-

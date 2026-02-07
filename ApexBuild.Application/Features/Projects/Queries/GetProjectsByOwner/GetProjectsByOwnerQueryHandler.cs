@@ -44,7 +44,7 @@ public class GetProjectsByOwnerQueryHandler : IRequestHandler<GetProjectsByOwner
             Code = p.Code,
             Description = p.Description,
             Status = p.Status,
-            ProjectType = p.ProjectType,
+            ProjectType = p.ProjectType.ToString(),
             StartDate = p.StartDate,
             ExpectedEndDate = p.ExpectedEndDate,
             Budget = p.Budget,
@@ -62,4 +62,3 @@ public class GetProjectsByOwnerQueryHandler : IRequestHandler<GetProjectsByOwner
         };
     }
 }
-

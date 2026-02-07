@@ -48,7 +48,7 @@ public class GetProjectByIdQueryHandler : IRequestHandler<GetProjectByIdQuery, G
             Code = project.Code,
             Description = project.Description,
             Status = project.Status,
-            ProjectType = project.ProjectType,
+            ProjectType = project.ProjectType.ToString(),
             Location = project.Location,
             Address = project.Address,
             Latitude = project.Latitude,
@@ -72,4 +72,3 @@ public class GetProjectByIdQueryHandler : IRequestHandler<GetProjectByIdQuery, G
         };
     }
 }
-

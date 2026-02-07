@@ -2,6 +2,7 @@ using MediatR;
 using ApexBuild.Application.Common.Interfaces;
 using ApexBuild.Application.Common.Exceptions;
 using ApexBuild.Domain.Entities;
+using ApexBuild.Domain.Enums;
 
 namespace ApexBuild.Application.Features.Projects.Commands.UpdateProject;
 
@@ -62,7 +63,7 @@ public class UpdateProjectCommandHandler : IRequestHandler<UpdateProjectCommand,
             project.Status = request.Status.Value;
 
         if (!string.IsNullOrWhiteSpace(request.ProjectType))
-            project.ProjectType = request.ProjectType;
+            project.ProjectType = Enum.TryParse<ProjectType>(request.ProjectType, true, out var pt) ? pt : ProjectType.Building;
 
         if (request.Location != null)
             project.Location = request.Location;
@@ -129,4 +130,3 @@ public class UpdateProjectCommandHandler : IRequestHandler<UpdateProjectCommand,
         };
     }
 }
-

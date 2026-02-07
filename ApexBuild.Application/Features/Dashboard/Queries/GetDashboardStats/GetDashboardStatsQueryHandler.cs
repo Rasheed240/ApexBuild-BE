@@ -27,10 +27,35 @@ namespace ApexBuild.Application.Features.Dashboard.Queries.GetDashboardStats
             var currentUserId = _currentUserService.UserId;
             var orgIds = _currentUserService.GetOrganizationIds();
 
-            var activeProjects = await _unitOfWork.Projects.CountAsync(p => p.Status == ProjectStatus.Active, cancellationToken);
-            var teamMembers = await _unitOfWork.Users.CountAsync(u => true, cancellationToken);
-            var completedTasks = await _unitOfWork.Tasks.CountAsync(t => t.Status == TaskStatus.Completed, cancellationToken);
-            var upcomingDeadlines = await _unitOfWork.Tasks.CountAsync(t => t.DueDate != null && t.DueDate >= now && t.DueDate <= now.AddDays(7), cancellationToken);
+            // Use the explicitly requested org if provided, otherwise fall back to user's orgs
+            var filterOrgIds = request.OrganizationId.HasValue
+                ? new List<Guid> { request.OrganizationId.Value }
+                : orgIds;
+
+            var activeProjects = filterOrgIds.Any()
+                ? await _unitOfWork.Projects.CountAsync(p => p.Status == ProjectStatus.Active && filterOrgIds.Contains(p.OrganizationId), cancellationToken)
+                : await _unitOfWork.Projects.CountAsync(p => p.Status == ProjectStatus.Active, cancellationToken);
+
+            // Count members via WorkInfo for the org's projects
+            var teamMembers = filterOrgIds.Any()
+                ? await _unitOfWork.WorkInfos.CountAsync(w => filterOrgIds.Any(oid => w.Project.OrganizationId == oid), cancellationToken)
+                : await _unitOfWork.Users.CountAsync(u => true, cancellationToken);
+
+            // Filter tasks via projects in org
+            List<Guid> orgProjectIds = filterOrgIds.Any()
+                ? await _unitOfWork.Projects.GetAll()
+                    .Where(p => filterOrgIds.Contains(p.OrganizationId))
+                    .Select(p => p.Id)
+                    .ToListAsync(cancellationToken)
+                : new List<Guid>();
+
+            var completedTasks = orgProjectIds.Any()
+                ? await _unitOfWork.Tasks.CountAsync(t => t.Status == TaskStatus.Completed && orgProjectIds.Contains(t.ProjectId), cancellationToken)
+                : await _unitOfWork.Tasks.CountAsync(t => t.Status == TaskStatus.Completed, cancellationToken);
+
+            var upcomingDeadlines = orgProjectIds.Any()
+                ? await _unitOfWork.Tasks.CountAsync(t => t.DueDate != null && t.DueDate >= now && t.DueDate <= now.AddDays(7) && orgProjectIds.Contains(t.ProjectId), cancellationToken)
+                : await _unitOfWork.Tasks.CountAsync(t => t.DueDate != null && t.DueDate >= now && t.DueDate <= now.AddDays(7), cancellationToken);
             
             // Count TaskUpdates that the current user can review (role-based filtering)
             int pendingReviews = 0;
@@ -48,14 +73,17 @@ namespace ApexBuild.Application.Features.Dashboard.Queries.GetDashboardStats
                     .Where(tu => !tu.IsDeleted);
 
                 // Filter by organization context
-                if (orgIds.Any())
+                if (orgProjectIds.Any())
                 {
-                    var orgProjectIds = await _unitOfWork.Projects.GetAll()
-                        .Where(p => orgIds.Contains(p.OrganizationId))
+                    query = query.Where(tu => orgProjectIds.Contains(tu.Task.ProjectId));
+                }
+                else if (filterOrgIds.Any())
+                {
+                    var pids = await _unitOfWork.Projects.GetAll()
+                        .Where(p => filterOrgIds.Contains(p.OrganizationId))
                         .Select(p => p.Id)
                         .ToListAsync(cancellationToken);
-                    
-                    query = query.Where(tu => orgProjectIds.Contains(tu.Task.ProjectId));
+                    query = query.Where(tu => pids.Contains(tu.Task.ProjectId));
                 }
 
                 // Apply role-based filtering
@@ -108,7 +136,9 @@ namespace ApexBuild.Application.Features.Dashboard.Queries.GetDashboardStats
                 }
             }
             
-            var totalTasks = await _unitOfWork.Tasks.CountAsync(t => true, cancellationToken);
+            var totalTasks = orgProjectIds.Any()
+                ? await _unitOfWork.Tasks.CountAsync(t => orgProjectIds.Contains(t.ProjectId), cancellationToken)
+                : await _unitOfWork.Tasks.CountAsync(t => true, cancellationToken);
 
             return new GetDashboardStatsResponse
             {

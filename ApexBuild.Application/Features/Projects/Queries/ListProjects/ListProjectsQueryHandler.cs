@@ -28,7 +28,7 @@ public class ListProjectsQueryHandler : IRequestHandler<ListProjectsQuery, ListP
         // Build predicate with all conditions in one expression
         Expression<Func<Project, bool>> predicate = p => !p.IsDeleted &&
             (!request.Status.HasValue || p.Status == request.Status.Value) &&
-            (string.IsNullOrWhiteSpace(request.ProjectType) || p.ProjectType.ToLower().Contains(request.ProjectType.Trim().ToLower())) &&
+            (string.IsNullOrWhiteSpace(request.ProjectType) || p.ProjectType.ToString().ToLowerInvariant().Contains(request.ProjectType.Trim().ToLowerInvariant())) &&
             (string.IsNullOrWhiteSpace(request.SearchTerm) || 
              p.Name.ToLower().Contains(request.SearchTerm.Trim().ToLower()) ||
              p.Code.ToLower().Contains(request.SearchTerm.Trim().ToLower()) ||
@@ -63,7 +63,7 @@ public class ListProjectsQueryHandler : IRequestHandler<ListProjectsQuery, ListP
             Code = p.Code,
             Description = p.Description,
             Status = p.Status,
-            ProjectType = p.ProjectType,
+            ProjectType = p.ProjectType.ToString(),
             StartDate = p.StartDate,
             ExpectedEndDate = p.ExpectedEndDate,
             Budget = p.Budget,
@@ -89,4 +89,3 @@ public class ListProjectsQueryHandler : IRequestHandler<ListProjectsQuery, ListP
         };
     }
 }
-

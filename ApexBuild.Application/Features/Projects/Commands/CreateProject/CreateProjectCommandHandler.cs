@@ -81,7 +81,7 @@ public class CreateProjectCommandHandler : IRequestHandler<CreateProjectCommand,
             OrganizationId = request.OrganizationId,
             Description = request.Description,
             Status = request.Status,
-            ProjectType = request.ProjectType,
+            ProjectType = Enum.TryParse<ProjectType>(request.ProjectType, true, out var pt) ? pt : ProjectType.Building,
             Location = request.Location,
             Address = request.Address,
             Latitude = request.Latitude,
@@ -143,4 +143,3 @@ public class CreateProjectCommandHandler : IRequestHandler<CreateProjectCommand,
         return $"{prefix}-{year}-{sequence:D3}";
     }
 }
-

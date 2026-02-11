@@ -41,8 +41,8 @@ public class MarkTaskDoneCommandHandler : IRequestHandler<MarkTaskDoneCommand, M
             throw new ForbiddenException("You are not assigned to this task");
         }
 
-        // Mark task as done
-        task.Status = TaskStatus.Done;
+        // Mark task as under review (field worker marks done, supervisor reviews)
+        task.Status = TaskStatus.UnderReview;
         task.Progress = 100;
 
         await _unitOfWork.Tasks.UpdateAsync(task);
@@ -51,7 +51,7 @@ public class MarkTaskDoneCommandHandler : IRequestHandler<MarkTaskDoneCommand, M
         return new MarkTaskDoneResponse
         {
             TaskId = task.Id,
-            Status = "Done",
+            Status = "UnderReview",
             Message = "Task marked as done. Please submit your work for review."
         };
     }

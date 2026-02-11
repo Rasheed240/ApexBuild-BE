@@ -112,11 +112,11 @@ namespace ApexBuild.Application.Features.Authentication.Commands.Register
                 await _unitOfWork.SaveChangesAsync(cancellationToken);
             }
 
-            // Create trial subscription - 30 days trial with 5 licenses
+            // Create trial subscription - 30 days trial
             var (subscriptionSuccess, subscription, subscriptionError) = await _subscriptionService.CreateSubscriptionAsync(
                 organization.Id,
                 user.Id,
-                numberOfLicenses: 5,
+                isFreePlan: false,
                 trialDays: 30
             );
 
@@ -126,11 +126,6 @@ namespace ApexBuild.Application.Features.Authentication.Commands.Register
                 // The organization is created but without subscription
                 // Admin can add subscription later
                 System.Diagnostics.Debug.WriteLine($"Warning: Failed to create trial subscription: {subscriptionError}");
-            }
-            else
-            {
-                // Assign license to the owner
-                await _subscriptionService.AssignLicenseAsync(organization.Id, user.Id);
             }
 
             // Send confirmation email AFTER successful save

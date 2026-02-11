@@ -14,18 +14,15 @@ namespace ApexBuild.Application.Features.Users.Commands.AcceptInvite
         private readonly IUnitOfWork _unitOfWork;
         private readonly IPasswordHasher _passwordHasher;
         private readonly IJwtTokenService _jwtTokenService;
-        private readonly ISubscriptionService _subscriptionService;
 
         public AcceptInviteCommandHandler(
             IUnitOfWork unitOfWork,
             IPasswordHasher passwordHasher,
-            IJwtTokenService jwtTokenService,
-            ISubscriptionService subscriptionService)
+            IJwtTokenService jwtTokenService)
         {
             _unitOfWork = unitOfWork;
             _passwordHasher = passwordHasher;
             _jwtTokenService = jwtTokenService;
-            _subscriptionService = subscriptionService;
         }
 
         public async Task<AcceptInviteResponse> Handle(AcceptInviteCommand request, CancellationToken cancellationToken)
@@ -152,24 +149,6 @@ namespace ApexBuild.Application.Features.Users.Commands.AcceptInvite
 
                     await _unitOfWork.OrganizationMembers.AddAsync(organizationMember, cancellationToken);
                     await _unitOfWork.SaveChangesAsync(cancellationToken);
-                }
-
-                // Assign license
-                try
-                {
-                    var (success, license, errorMessage) = await _subscriptionService.AssignLicenseAsync(
-                        invitation.OrganizationId.Value,
-                        user.Id);
-
-                    if (success)
-                    {
-                        // License assigned successfully
-                    }
-                    // If license assignment fails, continue anyway - don't block user creation
-                }
-                catch
-                {
-                    // Log error but don't block the invitation acceptance
                 }
             }
 

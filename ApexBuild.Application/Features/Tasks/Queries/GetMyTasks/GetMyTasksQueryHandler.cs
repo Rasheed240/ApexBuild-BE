@@ -72,10 +72,9 @@ public class GetMyTasksQueryHandler : IRequestHandler<GetMyTasksQuery, GetMyTask
         if (request.OrganizationId.HasValue)
         {
             tasksList = tasksList.Where(t =>
-                t.Department != null && (
-                    t.Department.OrganizationId == request.OrganizationId.Value ||
-                    (t.Department.Project != null && t.Department.Project.OrganizationId == request.OrganizationId.Value)
-                )
+                t.Department != null &&
+                t.Department.Project != null &&
+                t.Department.Project.OrganizationId == request.OrganizationId.Value
             ).ToList();
         }
 

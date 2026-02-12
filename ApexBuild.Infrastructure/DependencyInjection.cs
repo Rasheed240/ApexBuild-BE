@@ -36,7 +36,6 @@ namespace ApexBuild.Infrastructure
             services.AddScoped<INotificationRepository, NotificationRepository>();
             services.AddScoped<IAuditLogRepository, AuditLogRepository>();
             services.AddScoped<ISubscriptionRepository, SubscriptionRepository>();
-            services.AddScoped<IOrganizationLicenseRepository, OrganizationLicenseRepository>();
             services.AddScoped<IPaymentTransactionRepository, PaymentTransactionRepository>();
 
             // Register Services

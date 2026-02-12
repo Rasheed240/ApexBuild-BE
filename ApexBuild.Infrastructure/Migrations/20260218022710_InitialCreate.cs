@@ -7,7 +7,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace ApexBuild.Infrastructure.Migrations
 {
     /// <inheritdoc />
-    public partial class Initial : Migration
+    public partial class InitialCreate : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -76,47 +76,6 @@ namespace ApexBuild.Infrastructure.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("pk_users", x => x.id);
-                });
-
-            migrationBuilder.CreateTable(
-                name: "audit_logs",
-                columns: table => new
-                {
-                    id = table.Column<Guid>(type: "uuid", nullable: false),
-                    action_type = table.Column<string>(type: "text", nullable: false),
-                    entity_type = table.Column<string>(type: "text", nullable: false),
-                    entity_id = table.Column<Guid>(type: "uuid", nullable: false),
-                    related_entity_id = table.Column<Guid>(type: "uuid", nullable: true),
-                    related_entity_type = table.Column<string>(type: "text", nullable: true),
-                    user_id = table.Column<Guid>(type: "uuid", nullable: false),
-                    ip_address = table.Column<string>(type: "text", nullable: true),
-                    user_agent = table.Column<string>(type: "text", nullable: true),
-                    description = table.Column<string>(type: "text", nullable: false),
-                    old_values = table.Column<string>(type: "text", nullable: true),
-                    new_values = table.Column<string>(type: "text", nullable: true),
-                    changes_summary = table.Column<string>(type: "text", nullable: true),
-                    severity = table.Column<int>(type: "integer", nullable: false),
-                    status = table.Column<int>(type: "integer", nullable: false),
-                    error_message = table.Column<string>(type: "text", nullable: true),
-                    duration_ms = table.Column<int>(type: "integer", nullable: false),
-                    action_timestamp = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    metadata = table.Column<string>(type: "text", nullable: true),
-                    is_reversible = table.Column<bool>(type: "boolean", nullable: false),
-                    undo_audit_log_id = table.Column<Guid>(type: "uuid", nullable: true),
-                    created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    updated_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
-                    created_by = table.Column<Guid>(type: "uuid", nullable: true),
-                    last_modified_by = table.Column<Guid>(type: "uuid", nullable: true)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("pk_audit_logs", x => x.id);
-                    table.ForeignKey(
-                        name: "fk_audit_logs_users_user_id",
-                        column: x => x.user_id,
-                        principalTable: "users",
-                        principalColumn: "id",
-                        onDelete: ReferentialAction.Cascade);
                 });
 
             migrationBuilder.CreateTable(
@@ -221,6 +180,53 @@ namespace ApexBuild.Infrastructure.Migrations
                 });
 
             migrationBuilder.CreateTable(
+                name: "audit_logs",
+                columns: table => new
+                {
+                    id = table.Column<Guid>(type: "uuid", nullable: false),
+                    action_type = table.Column<string>(type: "text", nullable: false),
+                    entity_type = table.Column<string>(type: "text", nullable: false),
+                    entity_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    related_entity_id = table.Column<Guid>(type: "uuid", nullable: true),
+                    related_entity_type = table.Column<string>(type: "text", nullable: true),
+                    user_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    organization_id = table.Column<Guid>(type: "uuid", nullable: true),
+                    ip_address = table.Column<string>(type: "text", nullable: true),
+                    user_agent = table.Column<string>(type: "text", nullable: true),
+                    description = table.Column<string>(type: "text", nullable: false),
+                    old_values = table.Column<string>(type: "text", nullable: true),
+                    new_values = table.Column<string>(type: "text", nullable: true),
+                    changes_summary = table.Column<string>(type: "text", nullable: true),
+                    severity = table.Column<int>(type: "integer", nullable: false),
+                    status = table.Column<int>(type: "integer", nullable: false),
+                    error_message = table.Column<string>(type: "text", nullable: true),
+                    duration_ms = table.Column<int>(type: "integer", nullable: false),
+                    action_timestamp = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    metadata = table.Column<string>(type: "jsonb", nullable: true),
+                    is_reversible = table.Column<bool>(type: "boolean", nullable: false),
+                    undo_audit_log_id = table.Column<Guid>(type: "uuid", nullable: true),
+                    created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    updated_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    created_by = table.Column<Guid>(type: "uuid", nullable: true),
+                    last_modified_by = table.Column<Guid>(type: "uuid", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("pk_audit_logs", x => x.id);
+                    table.ForeignKey(
+                        name: "fk_audit_logs_organizations_organization_id",
+                        column: x => x.organization_id,
+                        principalTable: "organizations",
+                        principalColumn: "id");
+                    table.ForeignKey(
+                        name: "fk_audit_logs_users_user_id",
+                        column: x => x.user_id,
+                        principalTable: "users",
+                        principalColumn: "id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "organization_members",
                 columns: table => new
                 {
@@ -263,7 +269,7 @@ namespace ApexBuild.Infrastructure.Migrations
                     organization_id = table.Column<Guid>(type: "uuid", nullable: false),
                     description = table.Column<string>(type: "character varying(2000)", maxLength: 2000, nullable: false),
                     status = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false),
-                    project_type = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
+                    project_type = table.Column<int>(type: "integer", maxLength: 100, nullable: false),
                     location = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
                     address = table.Column<string>(type: "text", nullable: true),
                     latitude = table.Column<decimal>(type: "numeric", nullable: true),
@@ -273,11 +279,12 @@ namespace ApexBuild.Infrastructure.Migrations
                     end_date = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
                     actual_end_date = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
                     budget = table.Column<decimal>(type: "numeric(18,2)", precision: 18, scale: 2, nullable: true),
-                    currency = table.Column<string>(type: "character varying(3)", maxLength: 3, nullable: true),
+                    currency = table.Column<string>(type: "character varying(3)", maxLength: 3, nullable: false),
                     owner_id = table.Column<Guid>(type: "uuid", nullable: true),
                     project_admin_id = table.Column<Guid>(type: "uuid", nullable: true),
                     cover_image_url = table.Column<string>(type: "text", nullable: true),
                     image_urls = table.Column<string>(type: "jsonb", nullable: true),
+                    document_urls = table.Column<string>(type: "jsonb", nullable: true),
                     meta_data = table.Column<Dictionary<string, object>>(type: "jsonb", nullable: true),
                     is_deleted = table.Column<bool>(type: "boolean", nullable: false),
                     deleted_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
@@ -317,9 +324,9 @@ namespace ApexBuild.Infrastructure.Migrations
                     id = table.Column<Guid>(type: "uuid", nullable: false),
                     organization_id = table.Column<Guid>(type: "uuid", nullable: false),
                     user_id = table.Column<Guid>(type: "uuid", nullable: false),
-                    number_of_licenses = table.Column<int>(type: "integer", nullable: false),
-                    licenses_used = table.Column<int>(type: "integer", nullable: false),
-                    license_cost_per_month = table.Column<decimal>(type: "numeric", nullable: false),
+                    user_monthly_rate = table.Column<decimal>(type: "numeric", nullable: false),
+                    active_user_count = table.Column<int>(type: "integer", nullable: false),
+                    is_free_plan = table.Column<bool>(type: "boolean", nullable: false),
                     status = table.Column<int>(type: "integer", nullable: false),
                     billing_cycle = table.Column<int>(type: "integer", nullable: false),
                     billing_start_date = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
@@ -335,7 +342,6 @@ namespace ApexBuild.Infrastructure.Migrations
                     stripe_current_period_end = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
                     auto_renew = table.Column<bool>(type: "boolean", nullable: false),
                     amount = table.Column<decimal>(type: "numeric", nullable: false),
-                    created_on = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     cancelled_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
                     cancellation_reason = table.Column<string>(type: "text", nullable: true),
                     is_trial_period = table.Column<bool>(type: "boolean", nullable: false),
@@ -375,7 +381,7 @@ namespace ApexBuild.Infrastructure.Migrations
                     code = table.Column<string>(type: "text", nullable: false),
                     description = table.Column<string>(type: "text", nullable: true),
                     project_id = table.Column<Guid>(type: "uuid", nullable: false),
-                    organization_id = table.Column<Guid>(type: "uuid", nullable: true),
+                    contractor_id = table.Column<Guid>(type: "uuid", nullable: true),
                     supervisor_id = table.Column<Guid>(type: "uuid", nullable: true),
                     status = table.Column<int>(type: "integer", nullable: false),
                     start_date = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
@@ -387,6 +393,7 @@ namespace ApexBuild.Infrastructure.Migrations
                     is_deleted = table.Column<bool>(type: "boolean", nullable: false),
                     deleted_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
                     deleted_by = table.Column<Guid>(type: "uuid", nullable: true),
+                    organization_id = table.Column<Guid>(type: "uuid", nullable: true),
                     created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     updated_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
                     created_by = table.Column<Guid>(type: "uuid", nullable: true),
@@ -399,8 +406,7 @@ namespace ApexBuild.Infrastructure.Migrations
                         name: "fk_departments_organizations_organization_id",
                         column: x => x.organization_id,
                         principalTable: "organizations",
-                        principalColumn: "id",
-                        onDelete: ReferentialAction.Cascade);
+                        principalColumn: "id");
                     table.ForeignKey(
                         name: "fk_departments_projects_project_id",
                         column: x => x.project_id,
@@ -500,54 +506,6 @@ namespace ApexBuild.Infrastructure.Migrations
                 });
 
             migrationBuilder.CreateTable(
-                name: "organization_licenses",
-                columns: table => new
-                {
-                    id = table.Column<Guid>(type: "uuid", nullable: false),
-                    organization_id = table.Column<Guid>(type: "uuid", nullable: false),
-                    user_id = table.Column<Guid>(type: "uuid", nullable: false),
-                    subscription_id = table.Column<Guid>(type: "uuid", nullable: false),
-                    license_key = table.Column<string>(type: "text", nullable: false),
-                    status = table.Column<int>(type: "integer", nullable: false),
-                    assigned_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    valid_from = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    valid_until = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    revoked_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
-                    revocation_reason = table.Column<string>(type: "text", nullable: true),
-                    license_type = table.Column<string>(type: "text", nullable: false),
-                    meta_data = table.Column<Dictionary<string, object>>(type: "jsonb", nullable: true),
-                    is_deleted = table.Column<bool>(type: "boolean", nullable: false),
-                    deleted_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
-                    deleted_by = table.Column<Guid>(type: "uuid", nullable: true),
-                    created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    updated_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
-                    created_by = table.Column<Guid>(type: "uuid", nullable: true),
-                    last_modified_by = table.Column<Guid>(type: "uuid", nullable: true)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("pk_organization_licenses", x => x.id);
-                    table.ForeignKey(
-                        name: "fk_organization_licenses_organizations_organization_id",
-                        column: x => x.organization_id,
-                        principalTable: "organizations",
-                        principalColumn: "id",
-                        onDelete: ReferentialAction.Cascade);
-                    table.ForeignKey(
-                        name: "fk_organization_licenses_subscriptions_subscription_id",
-                        column: x => x.subscription_id,
-                        principalTable: "subscriptions",
-                        principalColumn: "id",
-                        onDelete: ReferentialAction.Cascade);
-                    table.ForeignKey(
-                        name: "fk_organization_licenses_users_user_id",
-                        column: x => x.user_id,
-                        principalTable: "users",
-                        principalColumn: "id",
-                        onDelete: ReferentialAction.Cascade);
-                });
-
-            migrationBuilder.CreateTable(
                 name: "payment_transactions",
                 columns: table => new
                 {
@@ -613,6 +571,133 @@ namespace ApexBuild.Infrastructure.Migrations
                 });
 
             migrationBuilder.CreateTable(
+                name: "contractors",
+                columns: table => new
+                {
+                    id = table.Column<Guid>(type: "uuid", nullable: false),
+                    company_name = table.Column<string>(type: "text", nullable: false),
+                    code = table.Column<string>(type: "text", nullable: false),
+                    registration_number = table.Column<string>(type: "text", nullable: true),
+                    contract_number = table.Column<string>(type: "text", nullable: true),
+                    project_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    department_id = table.Column<Guid>(type: "uuid", nullable: true),
+                    contractor_admin_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    specialization = table.Column<string>(type: "text", nullable: false),
+                    description = table.Column<string>(type: "text", nullable: true),
+                    contract_start_date = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    contract_end_date = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    contract_value = table.Column<decimal>(type: "numeric", nullable: true),
+                    currency = table.Column<string>(type: "text", nullable: false),
+                    contract_document_urls = table.Column<string>(type: "jsonb", nullable: true),
+                    status = table.Column<int>(type: "integer", nullable: false),
+                    notes = table.Column<string>(type: "text", nullable: true),
+                    meta_data = table.Column<Dictionary<string, object>>(type: "jsonb", nullable: true),
+                    is_deleted = table.Column<bool>(type: "boolean", nullable: false),
+                    deleted_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    deleted_by = table.Column<Guid>(type: "uuid", nullable: true),
+                    created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    updated_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    created_by = table.Column<Guid>(type: "uuid", nullable: true),
+                    last_modified_by = table.Column<Guid>(type: "uuid", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("pk_contractors", x => x.id);
+                    table.ForeignKey(
+                        name: "fk_contractors_departments_department_id",
+                        column: x => x.department_id,
+                        principalTable: "departments",
+                        principalColumn: "id",
+                        onDelete: ReferentialAction.SetNull);
+                    table.ForeignKey(
+                        name: "fk_contractors_projects_project_id",
+                        column: x => x.project_id,
+                        principalTable: "projects",
+                        principalColumn: "id",
+                        onDelete: ReferentialAction.Restrict);
+                    table.ForeignKey(
+                        name: "fk_contractors_users_contractor_admin_id",
+                        column: x => x.contractor_admin_id,
+                        principalTable: "users",
+                        principalColumn: "id",
+                        onDelete: ReferentialAction.Restrict);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "department_supervisors",
+                columns: table => new
+                {
+                    id = table.Column<Guid>(type: "uuid", nullable: false),
+                    department_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    supervisor_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    updated_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("pk_department_supervisors", x => x.id);
+                    table.ForeignKey(
+                        name: "fk_department_supervisors_departments_department_id",
+                        column: x => x.department_id,
+                        principalTable: "departments",
+                        principalColumn: "id",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "fk_department_supervisors_users_supervisor_id",
+                        column: x => x.supervisor_id,
+                        principalTable: "users",
+                        principalColumn: "id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "project_milestones",
+                columns: table => new
+                {
+                    id = table.Column<Guid>(type: "uuid", nullable: false),
+                    title = table.Column<string>(type: "text", nullable: false),
+                    description = table.Column<string>(type: "text", nullable: true),
+                    project_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    department_id = table.Column<Guid>(type: "uuid", nullable: true),
+                    created_by_user_id = table.Column<Guid>(type: "uuid", nullable: true),
+                    due_date = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    completed_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    status = table.Column<int>(type: "integer", nullable: false),
+                    progress = table.Column<decimal>(type: "numeric", nullable: false),
+                    order_index = table.Column<int>(type: "integer", nullable: false),
+                    notes = table.Column<string>(type: "text", nullable: true),
+                    meta_data = table.Column<Dictionary<string, object>>(type: "jsonb", nullable: true),
+                    is_deleted = table.Column<bool>(type: "boolean", nullable: false),
+                    deleted_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    deleted_by = table.Column<Guid>(type: "uuid", nullable: true),
+                    created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    updated_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    created_by = table.Column<Guid>(type: "uuid", nullable: true),
+                    last_modified_by = table.Column<Guid>(type: "uuid", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("pk_project_milestones", x => x.id);
+                    table.ForeignKey(
+                        name: "fk_project_milestones_departments_department_id",
+                        column: x => x.department_id,
+                        principalTable: "departments",
+                        principalColumn: "id",
+                        onDelete: ReferentialAction.SetNull);
+                    table.ForeignKey(
+                        name: "fk_project_milestones_projects_project_id",
+                        column: x => x.project_id,
+                        principalTable: "projects",
+                        principalColumn: "id",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "fk_project_milestones_users_created_by_user_id",
+                        column: x => x.created_by_user_id,
+                        principalTable: "users",
+                        principalColumn: "id");
+                });
+
+            migrationBuilder.CreateTable(
                 name: "invitations",
                 columns: table => new
                 {
@@ -620,16 +705,24 @@ namespace ApexBuild.Infrastructure.Migrations
                     invited_by_user_id = table.Column<Guid>(type: "uuid", nullable: false),
                     invited_user_id = table.Column<Guid>(type: "uuid", nullable: true),
                     email = table.Column<string>(type: "character varying(255)", maxLength: 255, nullable: false),
+                    is_existing_user = table.Column<bool>(type: "boolean", nullable: false),
                     role_id = table.Column<Guid>(type: "uuid", nullable: false),
                     project_id = table.Column<Guid>(type: "uuid", nullable: true),
                     organization_id = table.Column<Guid>(type: "uuid", nullable: true),
                     department_id = table.Column<Guid>(type: "uuid", nullable: true),
+                    contractor_id = table.Column<Guid>(type: "uuid", nullable: true),
                     token = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: false),
                     status = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false),
                     expires_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     accepted_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
                     message = table.Column<string>(type: "character varying(1000)", maxLength: 1000, nullable: true),
                     position = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: true),
+                    contract_type = table.Column<int>(type: "integer", nullable: false),
+                    work_start_date = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    work_end_date = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    contract_number = table.Column<string>(type: "text", nullable: true),
+                    contract_document_url = table.Column<string>(type: "text", nullable: true),
+                    hourly_rate = table.Column<decimal>(type: "numeric", nullable: true),
                     meta_data = table.Column<Dictionary<string, object>>(type: "jsonb", nullable: true),
                     created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     updated_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
@@ -639,6 +732,12 @@ namespace ApexBuild.Infrastructure.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("pk_invitations", x => x.id);
+                    table.ForeignKey(
+                        name: "fk_invitations_contractors_contractor_id",
+                        column: x => x.contractor_id,
+                        principalTable: "contractors",
+                        principalColumn: "id",
+                        onDelete: ReferentialAction.SetNull);
                     table.ForeignKey(
                         name: "fk_invitations_departments_department_id",
                         column: x => x.department_id,
@@ -675,70 +774,6 @@ namespace ApexBuild.Infrastructure.Migrations
                 });
 
             migrationBuilder.CreateTable(
-                name: "project_tasks",
-                columns: table => new
-                {
-                    id = table.Column<Guid>(type: "uuid", nullable: false),
-                    title = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false),
-                    description = table.Column<string>(type: "character varying(5000)", maxLength: 5000, nullable: false),
-                    code = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
-                    project_id = table.Column<Guid>(type: "uuid", nullable: false),
-                    department_id = table.Column<Guid>(type: "uuid", nullable: false),
-                    parent_task_id = table.Column<Guid>(type: "uuid", nullable: true),
-                    assigned_to_user_id = table.Column<Guid>(type: "uuid", nullable: true),
-                    assigned_by_user_id = table.Column<Guid>(type: "uuid", nullable: true),
-                    status = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false),
-                    priority = table.Column<int>(type: "integer", nullable: false),
-                    start_date = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
-                    due_date = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
-                    completed_date = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
-                    estimated_hours = table.Column<int>(type: "integer", nullable: false),
-                    actual_hours = table.Column<int>(type: "integer", nullable: true),
-                    progress = table.Column<decimal>(type: "numeric(5,2)", precision: 5, scale: 2, nullable: false),
-                    location = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
-                    tags = table.Column<string>(type: "jsonb", nullable: true),
-                    image_urls = table.Column<string>(type: "jsonb", nullable: true),
-                    video_urls = table.Column<string>(type: "jsonb", nullable: true),
-                    attachment_urls = table.Column<string>(type: "jsonb", nullable: true),
-                    meta_data = table.Column<Dictionary<string, object>>(type: "jsonb", nullable: true),
-                    is_deleted = table.Column<bool>(type: "boolean", nullable: false),
-                    deleted_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
-                    deleted_by = table.Column<Guid>(type: "uuid", nullable: true),
-                    created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    updated_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
-                    created_by = table.Column<Guid>(type: "uuid", nullable: true),
-                    last_modified_by = table.Column<Guid>(type: "uuid", nullable: true)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("pk_project_tasks", x => x.id);
-                    table.ForeignKey(
-                        name: "fk_project_tasks_departments_department_id",
-                        column: x => x.department_id,
-                        principalTable: "departments",
-                        principalColumn: "id",
-                        onDelete: ReferentialAction.Cascade);
-                    table.ForeignKey(
-                        name: "fk_project_tasks_project_tasks_parent_task_id",
-                        column: x => x.parent_task_id,
-                        principalTable: "project_tasks",
-                        principalColumn: "id",
-                        onDelete: ReferentialAction.Restrict);
-                    table.ForeignKey(
-                        name: "fk_project_tasks_users_assigned_by_user_id",
-                        column: x => x.assigned_by_user_id,
-                        principalTable: "users",
-                        principalColumn: "id",
-                        onDelete: ReferentialAction.Restrict);
-                    table.ForeignKey(
-                        name: "fk_project_tasks_users_assigned_to_user_id",
-                        column: x => x.assigned_to_user_id,
-                        principalTable: "users",
-                        principalColumn: "id",
-                        onDelete: ReferentialAction.Restrict);
-                });
-
-            migrationBuilder.CreateTable(
                 name: "work_infos",
                 columns: table => new
                 {
@@ -747,6 +782,7 @@ namespace ApexBuild.Infrastructure.Migrations
                     project_id = table.Column<Guid>(type: "uuid", nullable: false),
                     organization_id = table.Column<Guid>(type: "uuid", nullable: true),
                     department_id = table.Column<Guid>(type: "uuid", nullable: true),
+                    contractor_id = table.Column<Guid>(type: "uuid", nullable: true),
                     position = table.Column<string>(type: "text", nullable: false),
                     employee_id = table.Column<string>(type: "text", nullable: true),
                     start_date = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
@@ -755,8 +791,10 @@ namespace ApexBuild.Infrastructure.Migrations
                     is_active = table.Column<bool>(type: "boolean", nullable: false),
                     responsibilities = table.Column<string>(type: "text", nullable: true),
                     hourly_rate = table.Column<decimal>(type: "numeric", nullable: true),
-                    contract_type = table.Column<string>(type: "text", nullable: true),
+                    contract_type = table.Column<int>(type: "integer", nullable: false),
                     reporting_to = table.Column<string>(type: "text", nullable: true),
+                    contract_document_urls = table.Column<string>(type: "jsonb", nullable: true),
+                    contract_number = table.Column<string>(type: "text", nullable: true),
                     notes = table.Column<string>(type: "text", nullable: true),
                     created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     updated_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
@@ -766,6 +804,12 @@ namespace ApexBuild.Infrastructure.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("pk_work_infos", x => x.id);
+                    table.ForeignKey(
+                        name: "fk_work_infos_contractors_contractor_id",
+                        column: x => x.contractor_id,
+                        principalTable: "contractors",
+                        principalColumn: "id",
+                        onDelete: ReferentialAction.SetNull);
                     table.ForeignKey(
                         name: "fk_work_infos_departments_department_id",
                         column: x => x.department_id,
@@ -789,6 +833,85 @@ namespace ApexBuild.Infrastructure.Migrations
                         principalTable: "users",
                         principalColumn: "id",
                         onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "project_tasks",
+                columns: table => new
+                {
+                    id = table.Column<Guid>(type: "uuid", nullable: false),
+                    title = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false),
+                    description = table.Column<string>(type: "character varying(5000)", maxLength: 5000, nullable: false),
+                    code = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
+                    project_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    department_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    parent_task_id = table.Column<Guid>(type: "uuid", nullable: true),
+                    assigned_to_user_id = table.Column<Guid>(type: "uuid", nullable: true),
+                    assigned_by_user_id = table.Column<Guid>(type: "uuid", nullable: true),
+                    contractor_id = table.Column<Guid>(type: "uuid", nullable: true),
+                    milestone_id = table.Column<Guid>(type: "uuid", nullable: true),
+                    status = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false),
+                    priority = table.Column<int>(type: "integer", nullable: false),
+                    start_date = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    due_date = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    completed_date = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    estimated_hours = table.Column<int>(type: "integer", nullable: false),
+                    actual_hours = table.Column<int>(type: "integer", nullable: true),
+                    progress = table.Column<decimal>(type: "numeric(5,2)", precision: 5, scale: 2, nullable: false),
+                    location = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
+                    tags = table.Column<string>(type: "jsonb", nullable: true),
+                    image_urls = table.Column<string>(type: "jsonb", nullable: true),
+                    video_urls = table.Column<string>(type: "jsonb", nullable: true),
+                    audio_urls = table.Column<string>(type: "jsonb", nullable: true),
+                    attachment_urls = table.Column<string>(type: "jsonb", nullable: true),
+                    meta_data = table.Column<Dictionary<string, object>>(type: "jsonb", nullable: true),
+                    is_deleted = table.Column<bool>(type: "boolean", nullable: false),
+                    deleted_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    deleted_by = table.Column<Guid>(type: "uuid", nullable: true),
+                    created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    updated_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    created_by = table.Column<Guid>(type: "uuid", nullable: true),
+                    last_modified_by = table.Column<Guid>(type: "uuid", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("pk_project_tasks", x => x.id);
+                    table.ForeignKey(
+                        name: "fk_project_tasks_contractors_contractor_id",
+                        column: x => x.contractor_id,
+                        principalTable: "contractors",
+                        principalColumn: "id",
+                        onDelete: ReferentialAction.SetNull);
+                    table.ForeignKey(
+                        name: "fk_project_tasks_departments_department_id",
+                        column: x => x.department_id,
+                        principalTable: "departments",
+                        principalColumn: "id",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "fk_project_tasks_project_milestones_milestone_id",
+                        column: x => x.milestone_id,
+                        principalTable: "project_milestones",
+                        principalColumn: "id",
+                        onDelete: ReferentialAction.SetNull);
+                    table.ForeignKey(
+                        name: "fk_project_tasks_project_tasks_parent_task_id",
+                        column: x => x.parent_task_id,
+                        principalTable: "project_tasks",
+                        principalColumn: "id",
+                        onDelete: ReferentialAction.Restrict);
+                    table.ForeignKey(
+                        name: "fk_project_tasks_users_assigned_by_user_id",
+                        column: x => x.assigned_by_user_id,
+                        principalTable: "users",
+                        principalColumn: "id",
+                        onDelete: ReferentialAction.Restrict);
+                    table.ForeignKey(
+                        name: "fk_project_tasks_users_assigned_to_user_id",
+                        column: x => x.assigned_to_user_id,
+                        principalTable: "users",
+                        principalColumn: "id",
+                        onDelete: ReferentialAction.Restrict);
                 });
 
             migrationBuilder.CreateTable(
@@ -839,12 +962,16 @@ namespace ApexBuild.Infrastructure.Migrations
                     task_id = table.Column<Guid>(type: "uuid", nullable: false),
                     submitted_by_user_id = table.Column<Guid>(type: "uuid", nullable: false),
                     description = table.Column<string>(type: "text", nullable: false),
+                    summary = table.Column<string>(type: "text", nullable: true),
                     status = table.Column<int>(type: "integer", nullable: false),
                     media_urls = table.Column<string>(type: "jsonb", nullable: false),
                     media_types = table.Column<string>(type: "jsonb", nullable: false),
                     progress_percentage = table.Column<decimal>(type: "numeric", nullable: false),
-                    summary = table.Column<string>(type: "text", nullable: true),
                     submitted_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    reviewed_by_contractor_admin_id = table.Column<Guid>(type: "uuid", nullable: true),
+                    contractor_admin_reviewed_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    contractor_admin_feedback = table.Column<string>(type: "text", nullable: true),
+                    contractor_admin_approved = table.Column<bool>(type: "boolean", nullable: true),
                     reviewed_by_supervisor_id = table.Column<Guid>(type: "uuid", nullable: true),
                     supervisor_reviewed_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
                     supervisor_feedback = table.Column<string>(type: "text", nullable: true),
@@ -876,6 +1003,12 @@ namespace ApexBuild.Infrastructure.Migrations
                         column: x => x.reviewed_by_admin_id,
                         principalTable: "users",
                         principalColumn: "id");
+                    table.ForeignKey(
+                        name: "fk_task_updates_users_reviewed_by_contractor_admin_id",
+                        column: x => x.reviewed_by_contractor_admin_id,
+                        principalTable: "users",
+                        principalColumn: "id",
+                        onDelete: ReferentialAction.SetNull);
                     table.ForeignKey(
                         name: "fk_task_updates_users_reviewed_by_supervisor_id",
                         column: x => x.reviewed_by_supervisor_id,
@@ -928,9 +1061,40 @@ namespace ApexBuild.Infrastructure.Migrations
                 });
 
             migrationBuilder.CreateIndex(
+                name: "ix_audit_logs_organization_id",
+                table: "audit_logs",
+                column: "organization_id");
+
+            migrationBuilder.CreateIndex(
                 name: "ix_audit_logs_user_id",
                 table: "audit_logs",
                 column: "user_id");
+
+            migrationBuilder.CreateIndex(
+                name: "ix_contractors_contractor_admin_id",
+                table: "contractors",
+                column: "contractor_admin_id");
+
+            migrationBuilder.CreateIndex(
+                name: "ix_contractors_department_id",
+                table: "contractors",
+                column: "department_id",
+                unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "ix_contractors_project_id",
+                table: "contractors",
+                column: "project_id");
+
+            migrationBuilder.CreateIndex(
+                name: "ix_department_supervisors_department_id",
+                table: "department_supervisors",
+                column: "department_id");
+
+            migrationBuilder.CreateIndex(
+                name: "ix_department_supervisors_supervisor_id",
+                table: "department_supervisors",
+                column: "supervisor_id");
 
             migrationBuilder.CreateIndex(
                 name: "ix_departments_organization_id",
@@ -946,6 +1110,11 @@ namespace ApexBuild.Infrastructure.Migrations
                 name: "ix_departments_supervisor_id",
                 table: "departments",
                 column: "supervisor_id");
+
+            migrationBuilder.CreateIndex(
+                name: "ix_invitations_contractor_id",
+                table: "invitations",
+                column: "contractor_id");
 
             migrationBuilder.CreateIndex(
                 name: "ix_invitations_department_id",
@@ -994,21 +1163,6 @@ namespace ApexBuild.Infrastructure.Migrations
                 columns: new[] { "user_id", "is_read", "created_at" });
 
             migrationBuilder.CreateIndex(
-                name: "ix_organization_licenses_organization_id",
-                table: "organization_licenses",
-                column: "organization_id");
-
-            migrationBuilder.CreateIndex(
-                name: "ix_organization_licenses_subscription_id",
-                table: "organization_licenses",
-                column: "subscription_id");
-
-            migrationBuilder.CreateIndex(
-                name: "ix_organization_licenses_user_id",
-                table: "organization_licenses",
-                column: "user_id");
-
-            migrationBuilder.CreateIndex(
                 name: "ix_organization_members_organization_id",
                 table: "organization_members",
                 column: "organization_id");
@@ -1049,6 +1203,21 @@ namespace ApexBuild.Infrastructure.Migrations
                 column: "user_id");
 
             migrationBuilder.CreateIndex(
+                name: "ix_project_milestones_created_by_user_id",
+                table: "project_milestones",
+                column: "created_by_user_id");
+
+            migrationBuilder.CreateIndex(
+                name: "ix_project_milestones_department_id",
+                table: "project_milestones",
+                column: "department_id");
+
+            migrationBuilder.CreateIndex(
+                name: "ix_project_milestones_project_id",
+                table: "project_milestones",
+                column: "project_id");
+
+            migrationBuilder.CreateIndex(
                 name: "ix_project_tasks_assigned_by_user_id",
                 table: "project_tasks",
                 column: "assigned_by_user_id");
@@ -1066,9 +1235,19 @@ namespace ApexBuild.Infrastructure.Migrations
                 filter: "is_deleted = false");
 
             migrationBuilder.CreateIndex(
+                name: "ix_project_tasks_contractor_id",
+                table: "project_tasks",
+                column: "contractor_id");
+
+            migrationBuilder.CreateIndex(
                 name: "ix_project_tasks_department_id",
                 table: "project_tasks",
                 column: "department_id");
+
+            migrationBuilder.CreateIndex(
+                name: "ix_project_tasks_milestone_id",
+                table: "project_tasks",
+                column: "milestone_id");
 
             migrationBuilder.CreateIndex(
                 name: "ix_project_tasks_parent_task_id",
@@ -1086,9 +1265,10 @@ namespace ApexBuild.Infrastructure.Migrations
                 column: "role_id");
 
             migrationBuilder.CreateIndex(
-                name: "ix_project_users_user_id",
+                name: "IX_ProjectUsers_UserId_ProjectId",
                 table: "project_users",
-                column: "user_id");
+                columns: new[] { "user_id", "project_id" },
+                unique: true);
 
             migrationBuilder.CreateIndex(
                 name: "ix_projects_code",
@@ -1155,6 +1335,11 @@ namespace ApexBuild.Infrastructure.Migrations
                 column: "reviewed_by_admin_id");
 
             migrationBuilder.CreateIndex(
+                name: "ix_task_updates_reviewed_by_contractor_admin_id",
+                table: "task_updates",
+                column: "reviewed_by_contractor_admin_id");
+
+            migrationBuilder.CreateIndex(
                 name: "ix_task_updates_reviewed_by_supervisor_id",
                 table: "task_updates",
                 column: "reviewed_by_supervisor_id");
@@ -1219,6 +1404,11 @@ namespace ApexBuild.Infrastructure.Migrations
                 column: "refresh_token");
 
             migrationBuilder.CreateIndex(
+                name: "ix_work_infos_contractor_id",
+                table: "work_infos",
+                column: "contractor_id");
+
+            migrationBuilder.CreateIndex(
                 name: "ix_work_infos_department_id",
                 table: "work_infos",
                 column: "department_id");
@@ -1246,13 +1436,13 @@ namespace ApexBuild.Infrastructure.Migrations
                 name: "audit_logs");
 
             migrationBuilder.DropTable(
+                name: "department_supervisors");
+
+            migrationBuilder.DropTable(
                 name: "invitations");
 
             migrationBuilder.DropTable(
                 name: "notifications");
-
-            migrationBuilder.DropTable(
-                name: "organization_licenses");
 
             migrationBuilder.DropTable(
                 name: "organization_members");
@@ -1289,6 +1479,12 @@ namespace ApexBuild.Infrastructure.Migrations
 
             migrationBuilder.DropTable(
                 name: "roles");
+
+            migrationBuilder.DropTable(
+                name: "contractors");
+
+            migrationBuilder.DropTable(
+                name: "project_milestones");
 
             migrationBuilder.DropTable(
                 name: "departments");

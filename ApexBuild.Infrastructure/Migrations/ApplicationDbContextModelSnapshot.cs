@@ -86,7 +86,7 @@ namespace ApexBuild.Infrastructure.Migrations
                         .HasColumnName("last_modified_by");
 
                     b.Property<string>("Metadata")
-                        .HasColumnType("text")
+                        .HasColumnType("jsonb")
                         .HasColumnName("metadata");
 
                     b.Property<string>("NewValues")
@@ -96,6 +96,10 @@ namespace ApexBuild.Infrastructure.Migrations
                     b.Property<string>("OldValues")
                         .HasColumnType("text")
                         .HasColumnName("old_values");
+
+                    b.Property<Guid?>("OrganizationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("organization_id");
 
                     b.Property<Guid?>("RelatedEntityId")
                         .HasColumnType("uuid")
@@ -132,10 +136,136 @@ namespace ApexBuild.Infrastructure.Migrations
                     b.HasKey("Id")
                         .HasName("pk_audit_logs");
 
+                    b.HasIndex("OrganizationId")
+                        .HasDatabaseName("ix_audit_logs_organization_id");
+
                     b.HasIndex("UserId")
                         .HasDatabaseName("ix_audit_logs_user_id");
 
                     b.ToTable("audit_logs", (string)null);
+                });
+
+            modelBuilder.Entity("ApexBuild.Domain.Entities.Contractor", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("code");
+
+                    b.Property<string>("CompanyName")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("company_name");
+
+                    b.Property<string>("ContractDocumentUrls")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("contract_document_urls");
+
+                    b.Property<DateTime>("ContractEndDate")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("contract_end_date");
+
+                    b.Property<string>("ContractNumber")
+                        .HasColumnType("text")
+                        .HasColumnName("contract_number");
+
+                    b.Property<DateTime>("ContractStartDate")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("contract_start_date");
+
+                    b.Property<decimal?>("ContractValue")
+                        .HasColumnType("numeric")
+                        .HasColumnName("contract_value");
+
+                    b.Property<Guid>("ContractorAdminId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("contractor_admin_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("currency");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<Guid?>("DeletedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("deleted_by");
+
+                    b.Property<Guid?>("DepartmentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("department_id");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text")
+                        .HasColumnName("description");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<Guid?>("LastModifiedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("last_modified_by");
+
+                    b.Property<Dictionary<string, object>>("MetaData")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("meta_data");
+
+                    b.Property<string>("Notes")
+                        .HasColumnType("text")
+                        .HasColumnName("notes");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("project_id");
+
+                    b.Property<string>("RegistrationNumber")
+                        .HasColumnType("text")
+                        .HasColumnName("registration_number");
+
+                    b.Property<string>("Specialization")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("specialization");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer")
+                        .HasColumnName("status");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_contractors");
+
+                    b.HasIndex("ContractorAdminId")
+                        .HasDatabaseName("ix_contractors_contractor_admin_id");
+
+                    b.HasIndex("DepartmentId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_contractors_department_id");
+
+                    b.HasIndex("ProjectId")
+                        .HasDatabaseName("ix_contractors_project_id");
+
+                    b.ToTable("contractors", (string)null);
                 });
 
             modelBuilder.Entity("ApexBuild.Domain.Entities.Department", b =>
@@ -149,6 +279,10 @@ namespace ApexBuild.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("code");
+
+                    b.Property<Guid?>("ContractorId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("contractor_id");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
@@ -243,6 +377,41 @@ namespace ApexBuild.Infrastructure.Migrations
                     b.ToTable("departments", (string)null);
                 });
 
+            modelBuilder.Entity("ApexBuild.Domain.Entities.DepartmentSupervisor", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("DepartmentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("department_id");
+
+                    b.Property<Guid>("SupervisorId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("supervisor_id");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_department_supervisors");
+
+                    b.HasIndex("DepartmentId")
+                        .HasDatabaseName("ix_department_supervisors_department_id");
+
+                    b.HasIndex("SupervisorId")
+                        .HasDatabaseName("ix_department_supervisors_supervisor_id");
+
+                    b.ToTable("department_supervisors", (string)null);
+                });
+
             modelBuilder.Entity("ApexBuild.Domain.Entities.Invitation", b =>
                 {
                     b.Property<Guid>("Id")
@@ -253,6 +422,22 @@ namespace ApexBuild.Infrastructure.Migrations
                     b.Property<DateTime?>("AcceptedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("accepted_at");
+
+                    b.Property<string>("ContractDocumentUrl")
+                        .HasColumnType("text")
+                        .HasColumnName("contract_document_url");
+
+                    b.Property<string>("ContractNumber")
+                        .HasColumnType("text")
+                        .HasColumnName("contract_number");
+
+                    b.Property<int>("ContractType")
+                        .HasColumnType("integer")
+                        .HasColumnName("contract_type");
+
+                    b.Property<Guid?>("ContractorId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("contractor_id");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
@@ -276,6 +461,10 @@ namespace ApexBuild.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("expires_at");
 
+                    b.Property<decimal?>("HourlyRate")
+                        .HasColumnType("numeric")
+                        .HasColumnName("hourly_rate");
+
                     b.Property<Guid>("InvitedByUserId")
                         .HasColumnType("uuid")
                         .HasColumnName("invited_by_user_id");
@@ -283,6 +472,10 @@ namespace ApexBuild.Infrastructure.Migrations
                     b.Property<Guid?>("InvitedUserId")
                         .HasColumnType("uuid")
                         .HasColumnName("invited_user_id");
+
+                    b.Property<bool>("IsExistingUser")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_existing_user");
 
                     b.Property<Guid?>("LastModifiedBy")
                         .HasColumnType("uuid")
@@ -330,8 +523,19 @@ namespace ApexBuild.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
 
+                    b.Property<DateTime?>("WorkEndDate")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("work_end_date");
+
+                    b.Property<DateTime?>("WorkStartDate")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("work_start_date");
+
                     b.HasKey("Id")
                         .HasName("pk_invitations");
+
+                    b.HasIndex("ContractorId")
+                        .HasDatabaseName("ix_invitations_contractor_id");
 
                     b.HasIndex("DepartmentId")
                         .HasDatabaseName("ix_invitations_department_id");
@@ -586,106 +790,6 @@ namespace ApexBuild.Infrastructure.Migrations
                         .HasDatabaseName("ix_organizations_owner_id");
 
                     b.ToTable("organizations", (string)null);
-                });
-
-            modelBuilder.Entity("ApexBuild.Domain.Entities.OrganizationLicense", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<DateTime>("AssignedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("assigned_at");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<Guid?>("CreatedBy")
-                        .HasColumnType("uuid")
-                        .HasColumnName("created_by");
-
-                    b.Property<DateTime?>("DeletedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("deleted_at");
-
-                    b.Property<Guid?>("DeletedBy")
-                        .HasColumnType("uuid")
-                        .HasColumnName("deleted_by");
-
-                    b.Property<bool>("IsDeleted")
-                        .HasColumnType("boolean")
-                        .HasColumnName("is_deleted");
-
-                    b.Property<Guid?>("LastModifiedBy")
-                        .HasColumnType("uuid")
-                        .HasColumnName("last_modified_by");
-
-                    b.Property<string>("LicenseKey")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("license_key");
-
-                    b.Property<string>("LicenseType")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("license_type");
-
-                    b.Property<Dictionary<string, object>>("MetaData")
-                        .HasColumnType("jsonb")
-                        .HasColumnName("meta_data");
-
-                    b.Property<Guid>("OrganizationId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("organization_id");
-
-                    b.Property<string>("RevocationReason")
-                        .HasColumnType("text")
-                        .HasColumnName("revocation_reason");
-
-                    b.Property<DateTime?>("RevokedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("revoked_at");
-
-                    b.Property<int>("Status")
-                        .HasColumnType("integer")
-                        .HasColumnName("status");
-
-                    b.Property<Guid>("SubscriptionId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("subscription_id");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("updated_at");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("user_id");
-
-                    b.Property<DateTime>("ValidFrom")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("valid_from");
-
-                    b.Property<DateTime>("ValidUntil")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("valid_until");
-
-                    b.HasKey("Id")
-                        .HasName("pk_organization_licenses");
-
-                    b.HasIndex("OrganizationId")
-                        .HasDatabaseName("ix_organization_licenses_organization_id");
-
-                    b.HasIndex("SubscriptionId")
-                        .HasDatabaseName("ix_organization_licenses_subscription_id");
-
-                    b.HasIndex("UserId")
-                        .HasDatabaseName("ix_organization_licenses_user_id");
-
-                    b.ToTable("organization_licenses", (string)null);
                 });
 
             modelBuilder.Entity("ApexBuild.Domain.Entities.OrganizationMember", b =>
@@ -992,6 +1096,7 @@ namespace ApexBuild.Infrastructure.Migrations
                         .HasColumnName("created_by");
 
                     b.Property<string>("Currency")
+                        .IsRequired()
                         .HasMaxLength(3)
                         .HasColumnType("character varying(3)")
                         .HasColumnName("currency");
@@ -1009,6 +1114,10 @@ namespace ApexBuild.Infrastructure.Migrations
                         .HasMaxLength(2000)
                         .HasColumnType("character varying(2000)")
                         .HasColumnName("description");
+
+                    b.Property<string>("DocumentUrls")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("document_urls");
 
                     b.Property<DateTime?>("ExpectedEndDate")
                         .HasColumnType("timestamp with time zone")
@@ -1065,10 +1174,9 @@ namespace ApexBuild.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("owner_id");
 
-                    b.Property<string>("ProjectType")
-                        .IsRequired()
+                    b.Property<int>("ProjectType")
                         .HasMaxLength(100)
-                        .HasColumnType("character varying(100)")
+                        .HasColumnType("integer")
                         .HasColumnName("project_type");
 
                     b.Property<DateTime?>("StartDate")
@@ -1105,6 +1213,105 @@ namespace ApexBuild.Infrastructure.Migrations
                     b.ToTable("projects", (string)null);
                 });
 
+            modelBuilder.Entity("ApexBuild.Domain.Entities.ProjectMilestone", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("completed_at");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<Guid?>("CreatedByUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by_user_id");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<Guid?>("DeletedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("deleted_by");
+
+                    b.Property<Guid?>("DepartmentId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("department_id");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text")
+                        .HasColumnName("description");
+
+                    b.Property<DateTime>("DueDate")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("due_date");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_deleted");
+
+                    b.Property<Guid?>("LastModifiedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("last_modified_by");
+
+                    b.Property<Dictionary<string, object>>("MetaData")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("meta_data");
+
+                    b.Property<string>("Notes")
+                        .HasColumnType("text")
+                        .HasColumnName("notes");
+
+                    b.Property<int>("OrderIndex")
+                        .HasColumnType("integer")
+                        .HasColumnName("order_index");
+
+                    b.Property<decimal>("Progress")
+                        .HasColumnType("numeric")
+                        .HasColumnName("progress");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("project_id");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer")
+                        .HasColumnName("status");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("title");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_project_milestones");
+
+                    b.HasIndex("CreatedByUserId")
+                        .HasDatabaseName("ix_project_milestones_created_by_user_id");
+
+                    b.HasIndex("DepartmentId")
+                        .HasDatabaseName("ix_project_milestones_department_id");
+
+                    b.HasIndex("ProjectId")
+                        .HasDatabaseName("ix_project_milestones_project_id");
+
+                    b.ToTable("project_milestones", (string)null);
+                });
+
             modelBuilder.Entity("ApexBuild.Domain.Entities.ProjectTask", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1128,6 +1335,10 @@ namespace ApexBuild.Infrastructure.Migrations
                         .HasColumnType("jsonb")
                         .HasColumnName("attachment_urls");
 
+                    b.Property<string>("AudioUrls")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("audio_urls");
+
                     b.Property<string>("Code")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -1137,6 +1348,10 @@ namespace ApexBuild.Infrastructure.Migrations
                     b.Property<DateTime?>("CompletedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("completed_date");
+
+                    b.Property<Guid?>("ContractorId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("contractor_id");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
@@ -1192,6 +1407,10 @@ namespace ApexBuild.Infrastructure.Migrations
                     b.Property<Dictionary<string, object>>("MetaData")
                         .HasColumnType("jsonb")
                         .HasColumnName("meta_data");
+
+                    b.Property<Guid?>("MilestoneId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("milestone_id");
 
                     b.Property<Guid?>("ParentTaskId")
                         .HasColumnType("uuid")
@@ -1252,8 +1471,14 @@ namespace ApexBuild.Infrastructure.Migrations
                         .HasDatabaseName("ix_project_tasks_code")
                         .HasFilter("is_deleted = false");
 
+                    b.HasIndex("ContractorId")
+                        .HasDatabaseName("ix_project_tasks_contractor_id");
+
                     b.HasIndex("DepartmentId")
                         .HasDatabaseName("ix_project_tasks_department_id");
+
+                    b.HasIndex("MilestoneId")
+                        .HasDatabaseName("ix_project_tasks_milestone_id");
 
                     b.HasIndex("ParentTaskId")
                         .HasDatabaseName("ix_project_tasks_parent_task_id");
@@ -1325,8 +1550,9 @@ namespace ApexBuild.Infrastructure.Migrations
                     b.HasIndex("RoleId")
                         .HasDatabaseName("ix_project_users_role_id");
 
-                    b.HasIndex("UserId")
-                        .HasDatabaseName("ix_project_users_user_id");
+                    b.HasIndex("UserId", "ProjectId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_ProjectUsers_UserId_ProjectId");
 
                     b.ToTable("project_users", (string)null);
                 });
@@ -1392,6 +1618,10 @@ namespace ApexBuild.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<int>("ActiveUserCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("active_user_count");
+
                     b.Property<decimal>("Amount")
                         .HasColumnType("numeric")
                         .HasColumnName("amount");
@@ -1428,10 +1658,6 @@ namespace ApexBuild.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("created_by");
 
-                    b.Property<DateTime>("CreatedOn")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_on");
-
                     b.Property<DateTime?>("DeletedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("deleted_at");
@@ -1444,6 +1670,10 @@ namespace ApexBuild.Infrastructure.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("is_deleted");
 
+                    b.Property<bool>("IsFreePlan")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_free_plan");
+
                     b.Property<bool>("IsTrialPeriod")
                         .HasColumnType("boolean")
                         .HasColumnName("is_trial_period");
@@ -1452,14 +1682,6 @@ namespace ApexBuild.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("last_modified_by");
 
-                    b.Property<decimal>("LicenseCostPerMonth")
-                        .HasColumnType("numeric")
-                        .HasColumnName("license_cost_per_month");
-
-                    b.Property<int>("LicensesUsed")
-                        .HasColumnType("integer")
-                        .HasColumnName("licenses_used");
-
                     b.Property<Dictionary<string, object>>("MetaData")
                         .HasColumnType("jsonb")
                         .HasColumnName("meta_data");
@@ -1467,10 +1689,6 @@ namespace ApexBuild.Infrastructure.Migrations
                     b.Property<DateTime?>("NextBillingDate")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("next_billing_date");
-
-                    b.Property<int>("NumberOfLicenses")
-                        .HasColumnType("integer")
-                        .HasColumnName("number_of_licenses");
 
                     b.Property<Guid>("OrganizationId")
                         .HasColumnType("uuid")
@@ -1523,6 +1741,10 @@ namespace ApexBuild.Infrastructure.Migrations
                     b.Property<Guid>("UserId")
                         .HasColumnType("uuid")
                         .HasColumnName("user_id");
+
+                    b.Property<decimal>("UserMonthlyRate")
+                        .HasColumnType("numeric")
+                        .HasColumnName("user_monthly_rate");
 
                     b.HasKey("Id")
                         .HasName("pk_subscriptions");
@@ -1626,6 +1848,18 @@ namespace ApexBuild.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("admin_reviewed_at");
 
+                    b.Property<bool?>("ContractorAdminApproved")
+                        .HasColumnType("boolean")
+                        .HasColumnName("contractor_admin_approved");
+
+                    b.Property<string>("ContractorAdminFeedback")
+                        .HasColumnType("text")
+                        .HasColumnName("contractor_admin_feedback");
+
+                    b.Property<DateTime?>("ContractorAdminReviewedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("contractor_admin_reviewed_at");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
@@ -1677,6 +1911,10 @@ namespace ApexBuild.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("reviewed_by_admin_id");
 
+                    b.Property<Guid?>("ReviewedByContractorAdminId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("reviewed_by_contractor_admin_id");
+
                     b.Property<Guid?>("ReviewedBySupervisorId")
                         .HasColumnType("uuid")
                         .HasColumnName("reviewed_by_supervisor_id");
@@ -1722,6 +1960,9 @@ namespace ApexBuild.Infrastructure.Migrations
 
                     b.HasIndex("ReviewedByAdminId")
                         .HasDatabaseName("ix_task_updates_reviewed_by_admin_id");
+
+                    b.HasIndex("ReviewedByContractorAdminId")
+                        .HasDatabaseName("ix_task_updates_reviewed_by_contractor_admin_id");
 
                     b.HasIndex("ReviewedBySupervisorId")
                         .HasDatabaseName("ix_task_updates_reviewed_by_supervisor_id");
@@ -2048,9 +2289,21 @@ namespace ApexBuild.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
-                    b.Property<string>("ContractType")
+                    b.Property<string>("ContractDocumentUrls")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("contract_document_urls");
+
+                    b.Property<string>("ContractNumber")
                         .HasColumnType("text")
+                        .HasColumnName("contract_number");
+
+                    b.Property<int>("ContractType")
+                        .HasColumnType("integer")
                         .HasColumnName("contract_type");
+
+                    b.Property<Guid?>("ContractorId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("contractor_id");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
@@ -2128,6 +2381,9 @@ namespace ApexBuild.Infrastructure.Migrations
                     b.HasKey("Id")
                         .HasName("pk_work_infos");
 
+                    b.HasIndex("ContractorId")
+                        .HasDatabaseName("ix_work_infos_contractor_id");
+
                     b.HasIndex("DepartmentId")
                         .HasDatabaseName("ix_work_infos_department_id");
 
@@ -2145,6 +2401,11 @@ namespace ApexBuild.Infrastructure.Migrations
 
             modelBuilder.Entity("ApexBuild.Domain.Entities.AuditLog", b =>
                 {
+                    b.HasOne("ApexBuild.Domain.Entities.Organization", "Organization")
+                        .WithMany()
+                        .HasForeignKey("OrganizationId")
+                        .HasConstraintName("fk_audit_logs_organizations_organization_id");
+
                     b.HasOne("ApexBuild.Domain.Entities.User", "User")
                         .WithMany()
                         .HasForeignKey("UserId")
@@ -2152,15 +2413,45 @@ namespace ApexBuild.Infrastructure.Migrations
                         .IsRequired()
                         .HasConstraintName("fk_audit_logs_users_user_id");
 
+                    b.Navigation("Organization");
+
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("ApexBuild.Domain.Entities.Contractor", b =>
+                {
+                    b.HasOne("ApexBuild.Domain.Entities.User", "ContractorAdmin")
+                        .WithMany()
+                        .HasForeignKey("ContractorAdminId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_contractors_users_contractor_admin_id");
+
+                    b.HasOne("ApexBuild.Domain.Entities.Department", "Department")
+                        .WithOne("Contractor")
+                        .HasForeignKey("ApexBuild.Domain.Entities.Contractor", "DepartmentId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_contractors_departments_department_id");
+
+                    b.HasOne("ApexBuild.Domain.Entities.Project", "Project")
+                        .WithMany("Contractors")
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_contractors_projects_project_id");
+
+                    b.Navigation("ContractorAdmin");
+
+                    b.Navigation("Department");
+
+                    b.Navigation("Project");
                 });
 
             modelBuilder.Entity("ApexBuild.Domain.Entities.Department", b =>
                 {
-                    b.HasOne("ApexBuild.Domain.Entities.Organization", "Organization")
+                    b.HasOne("ApexBuild.Domain.Entities.Organization", null)
                         .WithMany("Departments")
                         .HasForeignKey("OrganizationId")
-                        .OnDelete(DeleteBehavior.Cascade)
                         .HasConstraintName("fk_departments_organizations_organization_id");
 
                     b.HasOne("ApexBuild.Domain.Entities.Project", "Project")
@@ -2175,15 +2466,40 @@ namespace ApexBuild.Infrastructure.Migrations
                         .HasForeignKey("SupervisorId")
                         .HasConstraintName("fk_departments_users_supervisor_id");
 
-                    b.Navigation("Organization");
-
                     b.Navigation("Project");
+
+                    b.Navigation("Supervisor");
+                });
+
+            modelBuilder.Entity("ApexBuild.Domain.Entities.DepartmentSupervisor", b =>
+                {
+                    b.HasOne("ApexBuild.Domain.Entities.Department", "Department")
+                        .WithMany()
+                        .HasForeignKey("DepartmentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_department_supervisors_departments_department_id");
+
+                    b.HasOne("ApexBuild.Domain.Entities.User", "Supervisor")
+                        .WithMany()
+                        .HasForeignKey("SupervisorId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_department_supervisors_users_supervisor_id");
+
+                    b.Navigation("Department");
 
                     b.Navigation("Supervisor");
                 });
 
             modelBuilder.Entity("ApexBuild.Domain.Entities.Invitation", b =>
                 {
+                    b.HasOne("ApexBuild.Domain.Entities.Contractor", "Contractor")
+                        .WithMany()
+                        .HasForeignKey("ContractorId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_invitations_contractors_contractor_id");
+
                     b.HasOne("ApexBuild.Domain.Entities.Department", "Department")
                         .WithMany()
                         .HasForeignKey("DepartmentId")
@@ -2218,6 +2534,8 @@ namespace ApexBuild.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_invitations_roles_role_id");
+
+                    b.Navigation("Contractor");
 
                     b.Navigation("Department");
 
@@ -2254,36 +2572,6 @@ namespace ApexBuild.Infrastructure.Migrations
                         .HasConstraintName("fk_organizations_users_owner_id");
 
                     b.Navigation("Owner");
-                });
-
-            modelBuilder.Entity("ApexBuild.Domain.Entities.OrganizationLicense", b =>
-                {
-                    b.HasOne("ApexBuild.Domain.Entities.Organization", "Organization")
-                        .WithMany()
-                        .HasForeignKey("OrganizationId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("fk_organization_licenses_organizations_organization_id");
-
-                    b.HasOne("ApexBuild.Domain.Entities.Subscription", "Subscription")
-                        .WithMany("OrganizationLicenses")
-                        .HasForeignKey("SubscriptionId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("fk_organization_licenses_subscriptions_subscription_id");
-
-                    b.HasOne("ApexBuild.Domain.Entities.User", "User")
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("fk_organization_licenses_users_user_id");
-
-                    b.Navigation("Organization");
-
-                    b.Navigation("Subscription");
-
-                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("ApexBuild.Domain.Entities.OrganizationMember", b =>
@@ -2377,6 +2665,33 @@ namespace ApexBuild.Infrastructure.Migrations
                     b.Navigation("ProjectOwner");
                 });
 
+            modelBuilder.Entity("ApexBuild.Domain.Entities.ProjectMilestone", b =>
+                {
+                    b.HasOne("ApexBuild.Domain.Entities.User", "CreatedByUser")
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .HasConstraintName("fk_project_milestones_users_created_by_user_id");
+
+                    b.HasOne("ApexBuild.Domain.Entities.Department", "Department")
+                        .WithMany("Milestones")
+                        .HasForeignKey("DepartmentId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_project_milestones_departments_department_id");
+
+                    b.HasOne("ApexBuild.Domain.Entities.Project", "Project")
+                        .WithMany("Milestones")
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_project_milestones_projects_project_id");
+
+                    b.Navigation("CreatedByUser");
+
+                    b.Navigation("Department");
+
+                    b.Navigation("Project");
+                });
+
             modelBuilder.Entity("ApexBuild.Domain.Entities.ProjectTask", b =>
                 {
                     b.HasOne("ApexBuild.Domain.Entities.User", "AssignedByUser")
@@ -2391,12 +2706,24 @@ namespace ApexBuild.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .HasConstraintName("fk_project_tasks_users_assigned_to_user_id");
 
+                    b.HasOne("ApexBuild.Domain.Entities.Contractor", "Contractor")
+                        .WithMany("Tasks")
+                        .HasForeignKey("ContractorId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_project_tasks_contractors_contractor_id");
+
                     b.HasOne("ApexBuild.Domain.Entities.Department", "Department")
                         .WithMany("Tasks")
                         .HasForeignKey("DepartmentId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_project_tasks_departments_department_id");
+
+                    b.HasOne("ApexBuild.Domain.Entities.ProjectMilestone", "Milestone")
+                        .WithMany()
+                        .HasForeignKey("MilestoneId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_project_tasks_project_milestones_milestone_id");
 
                     b.HasOne("ApexBuild.Domain.Entities.ProjectTask", "ParentTask")
                         .WithMany("Subtasks")
@@ -2408,7 +2735,11 @@ namespace ApexBuild.Infrastructure.Migrations
 
                     b.Navigation("AssignedToUser");
 
+                    b.Navigation("Contractor");
+
                     b.Navigation("Department");
+
+                    b.Navigation("Milestone");
 
                     b.Navigation("ParentTask");
                 });
@@ -2499,6 +2830,12 @@ namespace ApexBuild.Infrastructure.Migrations
                         .HasForeignKey("ReviewedByAdminId")
                         .HasConstraintName("fk_task_updates_users_reviewed_by_admin_id");
 
+                    b.HasOne("ApexBuild.Domain.Entities.User", "ReviewedByContractorAdmin")
+                        .WithMany()
+                        .HasForeignKey("ReviewedByContractorAdminId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_task_updates_users_reviewed_by_contractor_admin_id");
+
                     b.HasOne("ApexBuild.Domain.Entities.User", "ReviewedBySupervisor")
                         .WithMany()
                         .HasForeignKey("ReviewedBySupervisorId")
@@ -2519,6 +2856,8 @@ namespace ApexBuild.Infrastructure.Migrations
                         .HasConstraintName("fk_task_updates_project_tasks_task_id");
 
                     b.Navigation("ReviewedByAdmin");
+
+                    b.Navigation("ReviewedByContractorAdmin");
 
                     b.Navigation("ReviewedBySupervisor");
 
@@ -2594,6 +2933,12 @@ namespace ApexBuild.Infrastructure.Migrations
 
             modelBuilder.Entity("ApexBuild.Domain.Entities.WorkInfo", b =>
                 {
+                    b.HasOne("ApexBuild.Domain.Entities.Contractor", "Contractor")
+                        .WithMany("Members")
+                        .HasForeignKey("ContractorId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_work_infos_contractors_contractor_id");
+
                     b.HasOne("ApexBuild.Domain.Entities.Department", "Department")
                         .WithMany("WorkInfos")
                         .HasForeignKey("DepartmentId")
@@ -2619,6 +2964,8 @@ namespace ApexBuild.Infrastructure.Migrations
                         .IsRequired()
                         .HasConstraintName("fk_work_infos_users_user_id");
 
+                    b.Navigation("Contractor");
+
                     b.Navigation("Department");
 
                     b.Navigation("Organization");
@@ -2628,8 +2975,19 @@ namespace ApexBuild.Infrastructure.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("ApexBuild.Domain.Entities.Contractor", b =>
+                {
+                    b.Navigation("Members");
+
+                    b.Navigation("Tasks");
+                });
+
             modelBuilder.Entity("ApexBuild.Domain.Entities.Department", b =>
                 {
+                    b.Navigation("Contractor");
+
+                    b.Navigation("Milestones");
+
                     b.Navigation("Tasks");
 
                     b.Navigation("WorkInfos");
@@ -2646,9 +3004,13 @@ namespace ApexBuild.Infrastructure.Migrations
 
             modelBuilder.Entity("ApexBuild.Domain.Entities.Project", b =>
                 {
+                    b.Navigation("Contractors");
+
                     b.Navigation("Departments");
 
                     b.Navigation("Invitations");
+
+                    b.Navigation("Milestones");
 
                     b.Navigation("ProjectUsers");
 
@@ -2673,8 +3035,6 @@ namespace ApexBuild.Infrastructure.Migrations
 
             modelBuilder.Entity("ApexBuild.Domain.Entities.Subscription", b =>
                 {
-                    b.Navigation("OrganizationLicenses");
-
                     b.Navigation("PaymentTransactions");
                 });
 

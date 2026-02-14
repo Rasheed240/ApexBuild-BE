@@ -1,79 +1,126 @@
 # Render Blueprint for ApexBuild Backend
-# This file allows you to deploy your service using Infrastructure as Code
-# Usage: render blueprint deploy -f render.yaml
+# Deploy via: Render Dashboard → Blueprints → Connect Repo
+# Or: render blueprint deploy -f render.yaml
 
 services:
   - type: web
     name: apexbuild-api
     runtime: docker
-    repo: https://github.com/your-username/your-repo.git # UPDATE THIS
+    repo: https://github.com/Rasheed240/ApexBuild-BE
     branch: master
-    rootDir: src
     dockerfilePath: ./Dockerfile
     dockerContext: ./
-    region: oregon # Options: oregon, frankfurt, singapore, ohio
-    plan: starter # Options: free, starter, standard, pro
+    region: frankfurt           # Match your existing Render region
+    plan: free                  # free | starter | standard | pro
     healthCheckPath: /health
+
     envVars:
+      # ── Runtime ──────────────────────────────────────────────────────────
       - key: ASPNETCORE_ENVIRONMENT
         value: Production
       - key: ASPNETCORE_URLS
         value: http://+:8080
+
+      # ── Database (PostgreSQL) ─────────────────────────────────────────────
+      # Paste your Aiven / Neon / Render Postgres connection string in the
+      # Render dashboard — never commit the real value here.
       - key: ConnectionStrings__DefaultConnection
-        sync: false # Set to true to sync from Render dashboard
+        sync: false
       - key: ConnectionStrings__HangfireConnection
         sync: false
+
+      # ── JWT ───────────────────────────────────────────────────────────────
       - key: Jwt__SecretKey
-        generateValue: true # Render will auto-generate secure secret
+        generateValue: true     # Render auto-generates a secure random secret
       - key: Jwt__Issuer
         value: ApexBuild
       - key: Jwt__Audience
         value: ApexBuildUsers
       - key: Jwt__ExpiryInHours
-        value: 24
+        value: "24"
       - key: Jwt__RefreshTokenExpiryInDays
-        value: 7
+        value: "7"
+
+      # ── Cloudinary ────────────────────────────────────────────────────────
       - key: Cloudinary__CloudName
         sync: false
       - key: Cloudinary__ApiKey
         sync: false
       - key: Cloudinary__ApiSecret
         sync: false
+
+      # ── Email — SMTP ──────────────────────────────────────────────────────
       - key: Smtp__Host
         value: smtp.gmail.com
       - key: Smtp__Port
-        value: 587
+        value: "587"
       - key: Smtp__Username
         sync: false
       - key: Smtp__Password
         sync: false
+
+      # ── Email — General / SendGrid ────────────────────────────────────────
       - key: Email__UseSendGrid
-        value: false
+        value: "false"
       - key: Email__FromAddress
         value: noreply@apexbuild.com
       - key: Email__FromName
         value: ApexBuild
-      - key: App__BaseUrl
-        value: https://apexbuild-api.onrender.com # UPDATE after deployment
-      - key: App__FrontendUrl
-        sync: false # Set in dashboard
-      - key: Cors__AllowedOrigins__0
-        sync: false # Set in dashboard
-      - key: Cors__AllowedOrigins__1
-        value: http://localhost:5173
-    autoDeploy: true # Auto-deploy on git push
-    buildFilter:
-      paths:
-        - src/**
-      ignoredPaths:
-        - src/ApexBuild.Tests/**
-        - '**/*.md'
+      - key: SendGrid__ApiKey
+        sync: false
 
-# Optional: PostgreSQL Database (if not using external Aiven)
-# databases:
-#   - name: apexbuild-db
-#     databaseName: apexbuild
-#     user: apexbuild
-#     region: oregon
-#     plan: starter # $7/month for 256MB RAM
-#     ipAllowList: [] # Empty = allow all
+      # ── Stripe ────────────────────────────────────────────────────────────
+      - key: StripeSettings__SecretKey
+        sync: false
+      - key: StripeSettings__PublishableKey
+        sync: false
+      - key: StripeSettings__WebhookSecret
+        sync: false
+      - key: StripeSettings__ProductId
+        sync: false
+      - key: StripeSettings__MonthlyPriceId
+        sync: false
+      - key: StripeSettings__AnnualPriceId
+        sync: false
+      - key: StripeSettings__Currency
+        value: USD
+      - key: StripeSettings__MonthlyLicenseCost
+        value: "10.00"
+      - key: StripeSettings__MaxRetryAttempts
+        value: "3"
+      - key: StripeSettings__RetryDelayMinutes
+        value: "15"
+
+      # ── Hangfire ──────────────────────────────────────────────────────────
+      - key: HangfireSettings__IsEnabled
+        value: "true"
+      - key: HangfireSettings__JobExpirationDays
+        value: "30"
+      - key: HangfireSettings__DashboardAuthorizationLevel
+        value: "1"
+
+      # ── App URLs ──────────────────────────────────────────────────────────
+      # Update App__BaseUrl after first deploy (Render assigns the URL)
+      - key: App__BaseUrl
+        value: https://apexbuild-api.onrender.com
+      - key: App__FrontendUrl
+        sync: false
+
+      # ── CORS ──────────────────────────────────────────────────────────────
+      # ASP.NET Core reads array items as Cors__AllowedOrigins__0, __1, etc.
+      - key: Cors__AllowedOrigins__0
+        sync: false             # Set to your production frontend URL in dashboard
+      - key: Cors__AllowedOrigins__1
+        value: http://localhost:5173  # local dev fallback (can remove in prod)
+
+      # ── Allowed Hosts ─────────────────────────────────────────────────────
+      - key: AllowedHosts
+        value: "*"
+
+    autoDeploy: true            # Auto-redeploy on git push to master
+    buildFilter:
+      ignoredPaths:
+        - ApexBuild.Tests/**
+        - "**/*.md"
+        - "*.ps1"
+        - "*.py"

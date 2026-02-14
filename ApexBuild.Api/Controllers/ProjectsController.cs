@@ -182,6 +182,7 @@ namespace ApexBuild.Api.Controllers
         [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status404NotFound)]
         public async Task<ActionResult<ApiResponse<GetProjectMembersResponse>>> GetProjectMembers(
             Guid projectId,
+            [FromQuery] Guid? departmentId = null,
             [FromQuery] string? searchTerm = null,
             [FromQuery] bool? isActive = null,
             [FromQuery] int pageNumber = 1,
@@ -190,6 +191,7 @@ namespace ApexBuild.Api.Controllers
             var query = new GetProjectMembersQuery
             {
                 ProjectId = projectId,
+                DepartmentId = departmentId,
                 SearchTerm = searchTerm,
                 IsActive = isActive,
                 PageNumber = pageNumber,

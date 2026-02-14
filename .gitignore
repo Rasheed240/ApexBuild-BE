@@ -16,6 +16,8 @@ appsettings.Development*.json
 # Environment files
 .env
 .env.*
+env.render.prod
+env.*.prod
 
 # Logs
 logs/

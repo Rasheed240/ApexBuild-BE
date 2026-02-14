@@ -1,4 +1,4 @@
-using ApexBuild.Application.Common.Interfaces;
+﻿using ApexBuild.Application.Common.Interfaces;
 using ApexBuild.Domain.Entities;
 using ApexBuild.Domain.Enums;
 using Microsoft.Extensions.Logging;
@@ -8,19 +8,12 @@ namespace ApexBuild.Infrastructure.Data
 {
     public class DatabaseSeeder
     {
+        // Helper: create a UTC DateTime from y/m/d to satisfy Npgsql 'timestamp with time zone'
+        private static DateTime D(int y, int m, int d) => new DateTime(y, m, d, 0, 0, 0, DateTimeKind.Utc);
         private readonly IUnitOfWork _unitOfWork;
         private readonly IPasswordHasher _passwordHasher;
         private readonly ISubscriptionService _subscriptionService;
         private readonly ILogger<DatabaseSeeder> _logger;
-
-        // Collections to store created entities for relationship building
-        private readonly List<User> _users = new();
-        private readonly List<Role> _roles = new();
-        private readonly List<Organization> _organizations = new();
-        private readonly List<Subscription> _subscriptions = new();
-        private readonly List<Project> _projects = new();
-        private readonly List<Department> _departments = new();
-        private readonly List<ProjectTask> _tasks = new();
 
         public DatabaseSeeder(
             IUnitOfWork unitOfWork,
@@ -33,1065 +26,1078 @@ namespace ApexBuild.Infrastructure.Data
             _subscriptionService = subscriptionService;
             _logger = logger;
         }
-
         public async Task<(bool Success, string Message)> SeedAsync(CancellationToken cancellationToken = default)
         {
             try
             {
                 _logger.LogInformation("Starting database seeding...");
-
-                // Check if already seeded
-                //var existingUser = await _unitOfWork.Users.GetByEmailAsync("usertest001@mailinator.com", cancellationToken);
-                //if (existingUser != null)
-                //{
-                //    return (false, "Database has already been seeded. Use the clear endpoint first if you want to re-seed.");
-                //}
-
-                // Seed in dependency order
-                await SeedRolesAsync(cancellationToken);
-                await SeedUsersAsync(cancellationToken);
-                await SeedOrganizationsAsync(cancellationToken);
-                await SeedSubscriptionsAsync(cancellationToken);
-                await SeedOrganizationMembersAndLicensesAsync(cancellationToken);
-                await SeedProjectsAsync(cancellationToken);
-                await SeedProjectUsersAndRolesAsync(cancellationToken);
-                await SeedDepartmentsAsync(cancellationToken);
-                await SeedWorkInfosAsync(cancellationToken);
-                await SeedTasksAsync(cancellationToken);
-                await SeedSubtasksAsync(cancellationToken);
-                await SeedTaskUpdatesAndCommentsAsync(cancellationToken);
-                await SeedInvitationsAsync(cancellationToken);
-                await SeedNotificationsAsync(cancellationToken);
-
-                _logger.LogInformation("Database seeding completed successfully!");
-                return (true, $"Successfully seeded database with {_users.Count} users, {_organizations.Count} organizations, {_projects.Count} projects, {_tasks.Count} tasks, and all related entities.");
+                var existingSuperAdmin = await _unitOfWork.Users.GetByEmailAsync("superadmin@apexbuild.io", cancellationToken);
+                if (existingSuperAdmin != null)
+                {
+                    _logger.LogInformation("Database already seeded. Skipping.");
+                    return (true, "Database already seeded.");
+                }
+                await _unitOfWork.BeginTransactionAsync(cancellationToken);
+                var roles       = await SeedRolesAsync(cancellationToken);
+                var users       = await SeedUsersAsync(cancellationToken);
+                await SeedUserRolesAsync(users, roles, cancellationToken);
+                var orgs        = await SeedOrganizationsAsync(users, cancellationToken);
+                await SeedOrganizationMembersAsync(orgs, users, cancellationToken);
+                await SeedSubscriptionsAsync(orgs, users, cancellationToken);
+                var projects    = await SeedProjectsAsync(orgs, users, cancellationToken);
+                var departments = await SeedDepartmentsAsync(projects, users, cancellationToken);
+                var contractors = await SeedContractorsAsync(projects, departments, users, cancellationToken);
+                await LinkDepartmentsToContractorsAsync(departments, contractors, cancellationToken);
+                var milestones  = await SeedMilestonesAsync(projects, cancellationToken);
+                await SeedProjectUsersAsync(projects, users, roles, cancellationToken);
+                var tasks       = await SeedTasksAsync(projects, departments, contractors, milestones, users, cancellationToken);
+                await SeedSubtasksAsync(tasks, users, cancellationToken);
+                await SeedTaskUpdatesAsync(tasks, users, cancellationToken);
+                await SeedTaskCommentsAsync(tasks, users, cancellationToken);
+                await SeedWorkInfosAsync(projects, departments, contractors, users, orgs, cancellationToken);
+                await SeedInvitationsAsync(projects, users, roles, cancellationToken);
+                await SeedNotificationsAsync(users, cancellationToken);
+                await _unitOfWork.CommitTransactionAsync(cancellationToken);
+                _logger.LogInformation("Database seeding completed successfully.");
+                return (true, "Database seeded successfully.");
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error occurred during database seeding");
-                return (false, $"Error during seeding: {ex.Message}");
+                await _unitOfWork.RollbackTransactionAsync(cancellationToken);
+                _logger.LogError(ex, "Database seeding failed.");
+                var inner = ex.InnerException;
+                var msgs = new System.Text.StringBuilder();
+                msgs.Append(ex.Message);
+                while (inner != null) { msgs.Append(" | INNER: "); msgs.Append(inner.Message); inner = inner.InnerException; }
+                return (false, $"Seeding failed: {msgs}");
             }
         }
 
-        private async Task SeedRolesAsync(CancellationToken cancellationToken)
+        // ============================================================
+        //  ROLES
+        // ============================================================
+        private async Task<Dictionary<string, Role>> SeedRolesAsync(CancellationToken ct)
         {
             _logger.LogInformation("Seeding roles...");
-
-            var roleTypes = new[]
+            var defs = new[]
             {
-                (RoleType.SuperAdmin, "Super Administrator", "Full system access", 1),
-                (RoleType.PlatformAdmin, "Platform Administrator", "Platform-level administration", 2),
-                (RoleType.ProjectOwner, "Project Owner", "Owns and controls projects", 3),
-                (RoleType.ProjectAdministrator, "Project Administrator", "Manages projects", 4),
-                (RoleType.ContractorAdmin, "Contractor Administrator", "Manages contractor organization", 5),
-                (RoleType.DepartmentSupervisor, "Department Supervisor", "Supervises departments", 6),
-                (RoleType.FieldWorker, "Field Worker", "Executes tasks", 7),
-                (RoleType.Observer, "Observer", "Read-only access", 8)
+                new { Name = "SuperAdmin",           Type = RoleType.SuperAdmin,           Level = 1, Desc = "Platform super administrator with full system access",         IsSystem = true  },
+                new { Name = "PlatformAdmin",        Type = RoleType.PlatformAdmin,        Level = 2, Desc = "Platform administrator who creates and manages organizations",  IsSystem = true  },
+                new { Name = "ProjectOwner",         Type = RoleType.ProjectOwner,         Level = 3, Desc = "Owner of a specific construction project",                     IsSystem = false },
+                new { Name = "ProjectAdministrator", Type = RoleType.ProjectAdministrator, Level = 4, Desc = "Administrator of a specific construction project",              IsSystem = false },
+                new { Name = "ContractorAdmin",      Type = RoleType.ContractorAdmin,      Level = 5, Desc = "Head of a contractor company team on a project",               IsSystem = false },
+                new { Name = "DepartmentSupervisor", Type = RoleType.DepartmentSupervisor, Level = 6, Desc = "Supervisor of a department within a project",                  IsSystem = false },
+                new { Name = "FieldWorker",          Type = RoleType.FieldWorker,          Level = 7, Desc = "Field worker assigned to and completing tasks",                 IsSystem = false },
+                new { Name = "Observer",             Type = RoleType.Observer,             Level = 8, Desc = "Read-only observer of a project",                              IsSystem = false },
             };
-
-            foreach (var (roleType, name, description, level) in roleTypes)
+            var result = new Dictionary<string, Role>();
+            foreach (var d in defs)
             {
+                var existing = await _unitOfWork.Roles.FirstOrDefaultAsync(r => r.Name == d.Name, ct);
+                if (existing != null) { result[d.Name] = existing; continue; }
                 var role = new Role
                 {
-                    Name = name,
-                    RoleType = roleType,
-                    Description = description,
-                    IsSystemRole = true,
-                    Level = level
+                    Id = Guid.NewGuid(), Name = d.Name, RoleType = d.Type,
+                    Level = d.Level, Description = d.Desc, IsSystemRole = d.IsSystem,
+                    CreatedAt = DateTime.UtcNow,
                 };
-                _roles.Add(role);
-                await _unitOfWork.Roles.AddAsync(role, cancellationToken);
+                await _unitOfWork.Roles.AddAsync(role, ct);
+                result[d.Name] = role;
             }
-
-            try
-            {
-                await _unitOfWork.SaveChangesAsync(cancellationToken);
-                return;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error occurred during database seeding");
-
-            }
-
-            _logger.LogInformation($"Seeded {_roles.Count} roles");
+            await _unitOfWork.SaveChangesAsync(ct);
+            _logger.LogInformation("Seeded {Count} roles.", result.Count);
+            return result;
         }
 
-        private async Task SeedUsersAsync(CancellationToken cancellationToken)
+        // ============================================================
+        //  USERS
+        // ============================================================
+        private async Task<Dictionary<string, User>> SeedUsersAsync(CancellationToken ct)
         {
             _logger.LogInformation("Seeding users...");
-
-            var passwordHash = _passwordHasher.HashPassword("Password123%");
-
-            var userDataList = new[]
+            var hash = _passwordHasher.HashPassword("Password123%");
+            var defs = new[]
             {
-                new { Email = "usertest001@mailinator.com", FirstName = "John", LastName = "Doe", Role = RoleType.SuperAdmin, Position = "CEO" },
-                new { Email = "usertest002@mailinator.com", FirstName = "Jane", LastName = "Smith", Role = RoleType.PlatformAdmin, Position = "Platform Manager" },
-                new { Email = "usertest003@mailinator.com", FirstName = "Michael", LastName = "Johnson", Role = RoleType.ProjectOwner, Position = "Project Owner" },
-                new { Email = "usertest004@mailinator.com", FirstName = "Sarah", LastName = "Williams", Role = RoleType.ProjectAdministrator, Position = "Project Manager" },
-                new { Email = "usertest005@mailinator.com", FirstName = "David", LastName = "Brown", Role = RoleType.DepartmentSupervisor, Position = "Electrical Supervisor" },
-                new { Email = "usertest006@mailinator.com", FirstName = "Emily", LastName = "Davis", Role = RoleType.FieldWorker, Position = "Electrician" },
-                new { Email = "usertest007@mailinator.com", FirstName = "Robert", LastName = "Miller", Role = RoleType.ContractorAdmin, Position = "Contractor CEO" },
-                new { Email = "usertest008@mailinator.com", FirstName = "Lisa", LastName = "Wilson", Role = RoleType.DepartmentSupervisor, Position = "Plumbing Supervisor" },
-                new { Email = "usertest009@mailinator.com", FirstName = "James", LastName = "Moore", Role = RoleType.FieldWorker, Position = "Plumber" },
-                new { Email = "usertest010@mailinator.com", FirstName = "Jennifer", LastName = "Taylor", Role = RoleType.ProjectOwner, Position = "Owner" },
-                new { Email = "usertest011@mailinator.com", FirstName = "William", LastName = "Anderson", Role = RoleType.DepartmentSupervisor, Position = "HVAC Supervisor" },
-                new { Email = "usertest012@mailinator.com", FirstName = "Mary", LastName = "Thomas", Role = RoleType.Observer, Position = "Inspector" }
+                new { Email = "superadmin@apexbuild.io",      First = "Alex",    Last = "Dev",     Phone = "+2348000000001" },
+                new { Email = "james.okafor@mailinator.com",  First = "James",   Last = "Okafor",  Phone = "+2348000000002" },
+                new { Email = "linda.stone@mailinator.com",   First = "Linda",   Last = "Stone",   Phone = "+2348000000003" },
+                new { Email = "michael.chen@mailinator.com",  First = "Michael", Last = "Chen",    Phone = "+2348000000004" },
+                new { Email = "grace.eze@mailinator.com",     First = "Grace",   Last = "Eze",     Phone = "+2348000000005" },
+                new { Email = "tony.adeyemi@mailinator.com",  First = "Tony",    Last = "Adeyemi", Phone = "+2348000000006" },
+                new { Email = "rita.obi@mailinator.com",      First = "Rita",    Last = "Obi",     Phone = "+2348000000007" },
+                new { Email = "samuel.king@mailinator.com",   First = "Samuel",  Last = "King",    Phone = "+2348000000008" },
+                new { Email = "fatima.bello@mailinator.com",  First = "Fatima",  Last = "Bello",   Phone = "+2348000000009" },
+                new { Email = "dan.foster@mailinator.com",    First = "Dan",     Last = "Foster",  Phone = "+2348000000010" },
+                new { Email = "ken.park@mailinator.com",      First = "Ken",     Last = "Park",    Phone = "+2348000000011" },
+                new { Email = "amaka.nwosu@mailinator.com",   First = "Amaka",   Last = "Nwosu",   Phone = "+2348000000012" },
+                new { Email = "david.osei@mailinator.com",    First = "David",   Last = "Osei",    Phone = "+2348000000013" },
+                new { Email = "chloe.west@mailinator.com",    First = "Chloe",   Last = "West",    Phone = "+2348000000014" },
             };
-
-            foreach (var userData in userDataList)
+            var result = new Dictionary<string, User>();
+            foreach (var d in defs)
             {
+                var existing = await _unitOfWork.Users.GetByEmailAsync(d.Email, ct);
+                if (existing != null) { result[d.Email] = existing; continue; }
                 var user = new User
                 {
-                    Email = userData.Email,
-                    FirstName = userData.FirstName,
-                    LastName = userData.LastName,
-                    PasswordHash = passwordHash,
-                    EmailConfirmed = true,
-                    EmailConfirmedAt = DateTime.UtcNow,
-                    Status = UserStatus.Active,
-                    PhoneNumber = $"+1-555-{Random.Shared.Next(100, 999)}-{Random.Shared.Next(1000, 9999)}",
-                    City = "New York",
-                    State = "NY",
-                    Country = "USA",
-                    Bio = $"{userData.Position} with extensive experience in construction management."
+                    Id = Guid.NewGuid(), Email = d.Email, FirstName = d.First, LastName = d.Last,
+                    PhoneNumber = d.Phone, PasswordHash = hash, Status = UserStatus.Active,
+                    EmailConfirmed = true, EmailConfirmedAt = DateTime.UtcNow, CreatedAt = DateTime.UtcNow,
                 };
-
-                // Add role to user ONLY if it is a system role (SuperAdmin or PlatformAdmin)
-                if (userData.Role == RoleType.SuperAdmin || userData.Role == RoleType.PlatformAdmin)
-                {
-                    var role = _roles.First(r => r.RoleType == userData.Role);
-                    var userRole = new UserRole
-                    {
-                        User = user,
-                        Role = role,
-                        RoleId = role.Id,
-                        IsActive = true,
-                        ActivatedAt = DateTime.UtcNow,
-                        OrganizationId = null // System roles are global
-                    };
-                    user.UserRoles.Add(userRole);
-                    await _unitOfWork.UserRoles.AddAsync(userRole, cancellationToken);
-                }
-
-                _users.Add(user);
-                await _unitOfWork.Users.AddAsync(user, cancellationToken);
+                await _unitOfWork.Users.AddAsync(user, ct);
+                result[d.Email] = user;
             }
-
-            try
-            {
-                await _unitOfWork.SaveChangesAsync(cancellationToken);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error occurred during database seeding");
-
-            }
-
-            _logger.LogInformation($"Seeded {_users.Count} users");
+            await _unitOfWork.SaveChangesAsync(ct);
+            _logger.LogInformation("Seeded {Count} users.", result.Count);
+            return result;
         }
 
-        private async Task SeedOrganizationsAsync(CancellationToken cancellationToken)
+        // ============================================================
+        //  USER ROLES (system-level)
+        // ============================================================
+        private async Task SeedUserRolesAsync(Dictionary<string, User> users, Dictionary<string, Role> roles, CancellationToken ct)
+        {
+            _logger.LogInformation("Seeding system-level user roles...");
+            var assignments = new[]
+            {
+                new { Email = "superadmin@apexbuild.io",     RoleName = "SuperAdmin"    },
+                new { Email = "james.okafor@mailinator.com", RoleName = "PlatformAdmin" },
+                new { Email = "linda.stone@mailinator.com",  RoleName = "PlatformAdmin" },
+                new { Email = "michael.chen@mailinator.com", RoleName = "PlatformAdmin" },
+            };
+            foreach (var a in assignments)
+            {
+                var user = users[a.Email]; var role = roles[a.RoleName];
+                if (await _unitOfWork.UserRoles.AnyAsync(ur => ur.UserId == user.Id && ur.RoleId == role.Id && ur.ProjectId == null, ct)) continue;
+                await _unitOfWork.UserRoles.AddAsync(new UserRole
+                {
+                    Id = Guid.NewGuid(), UserId = user.Id, RoleId = role.Id,
+                    IsActive = true, ActivatedAt = DateTime.UtcNow, CreatedAt = DateTime.UtcNow,
+                }, ct);
+            }
+            await _unitOfWork.SaveChangesAsync(ct);
+            _logger.LogInformation("Seeded system-level user roles.");
+        }
+
+        // ============================================================
+        //  ORGANIZATIONS
+        // ============================================================
+        private async Task<Dictionary<string, Organization>> SeedOrganizationsAsync(Dictionary<string, User> users, CancellationToken ct)
         {
             _logger.LogInformation("Seeding organizations...");
-
-            var organizationData = new[]
+            var result = new Dictionary<string, Organization>();
+            var okafor = await _unitOfWork.Organizations.FirstOrDefaultAsync(o => o.Code == "ORG-2025-001", ct);
+            if (okafor == null)
             {
-                new { Name = "TechBuild Corp", Code = "TBC", OwnerEmail = "usertest001@mailinator.com", Description = "Leading construction technology company" },
-                new { Name = "BuildPro Solutions", Code = "BPS", OwnerEmail = "usertest007@mailinator.com", Description = "Professional building contractors" },
-                new { Name = "ConstructCo Ltd", Code = "CCL", OwnerEmail = "usertest010@mailinator.com", Description = "Industrial construction specialists" }
-            };
-
-            foreach (var orgData in organizationData)
-            {
-                var owner = _users.First(u => u.Email == orgData.OwnerEmail);
-                var organization = new Organization
-                {
-                    Name = orgData.Name,
-                    Code = orgData.Code,
-                    Description = orgData.Description,
-                    OwnerId = owner.Id,
-                    Email = $"contact@{orgData.Code.ToLower()}.com",
-                    PhoneNumber = $"+1-800-{Random.Shared.Next(100, 999)}-{Random.Shared.Next(1000, 9999)}",
-                    City = "New York",
-                    State = "NY",
-                    Country = "USA",
-                    IsActive = true,
-                    IsVerified = true,
-                    VerifiedAt = DateTime.UtcNow
+                okafor = new Organization {
+                    Id = Guid.NewGuid(), Name = "OkaforBuilds Ltd", Code = "ORG-2025-001",
+                    Description = "A leading construction company based in Lagos, Nigeria.",
+                    Email = "info@okaforbuilds.com", PhoneNumber = "+2348100000001",
+                    Country = "Nigeria", City = "Lagos", State = "Lagos",
+                    OwnerId = users["james.okafor@mailinator.com"].Id,
+                    IsActive = true, IsVerified = true, VerifiedAt = DateTime.UtcNow, CreatedAt = DateTime.UtcNow,
                 };
-
-                _organizations.Add(organization);
-                await _unitOfWork.Organizations.AddAsync(organization, cancellationToken);
-
-                // Assign Owner Role scoped to this Organization
-                // Find the role type intended for this user from the initial list (simplification: assuming Owner needs ContractorAdmin or ProjectOwner)
-                // For simplicity in this seed, we'll assign 'ProjectOwner' or 'ContractorAdmin' based on context or just default to ContractorAdmin for org owners if not specified.
-                // However, matching the original seed intent:
-                // usertest001 (TechBuild) was SuperAdmin globally. He is also Owner of TechBuild. He might need an org-scoped role too if the system requires it.
-                // usertest007 (BuildPro) was ContractorAdmin globally.
-                // usertest010 (ConstructCo) was ProjectOwner globally. 
-                
-                RoleType ownerRoleType = RoleType.ContractorAdmin; // Default
-                if (orgData.OwnerEmail == "usertest010@mailinator.com") ownerRoleType = RoleType.ProjectOwner; // Based on original intent
-                
-                var role = _roles.First(r => r.RoleType == ownerRoleType);
-                var userRole = new UserRole
-                {
-                    UserId = owner.Id,
-                    RoleId = role.Id,
-                    OrganizationId = organization.Id,
-                    IsActive = true,
-                    ActivatedAt = DateTime.UtcNow
+                await _unitOfWork.Organizations.AddAsync(okafor, ct);
+            }
+            result["OkaforBuilds"] = okafor;
+            var stone = await _unitOfWork.Organizations.FirstOrDefaultAsync(o => o.Code == "ORG-2025-002", ct);
+            if (stone == null)
+            {
+                stone = new Organization {
+                    Id = Guid.NewGuid(), Name = "Stone & Partners Construction", Code = "ORG-2025-002",
+                    Description = "Specialist construction and renovation firm.",
+                    Email = "info@stoneandpartners.com", PhoneNumber = "+2348100000002",
+                    Country = "Nigeria", City = "Lagos", State = "Lagos",
+                    OwnerId = users["linda.stone@mailinator.com"].Id,
+                    IsActive = true, IsVerified = true, VerifiedAt = DateTime.UtcNow, CreatedAt = DateTime.UtcNow,
                 };
-                await _unitOfWork.UserRoles.AddAsync(userRole, cancellationToken);
+                await _unitOfWork.Organizations.AddAsync(stone, ct);
             }
-            try
+            result["StonePartners"] = stone;
+            var superDirect = await _unitOfWork.Organizations.FirstOrDefaultAsync(o => o.Code == "ORG-2025-000", ct);
+            if (superDirect == null)
             {
-                await _unitOfWork.SaveChangesAsync(cancellationToken);
+                superDirect = new Organization {
+                    Id = Guid.NewGuid(), Name = "SuperAdmin Direct", Code = "ORG-2025-000",
+                    Description = "SuperAdmin-owned organization for platform-managed projects.",
+                    Email = "superadmin@apexbuild.io", PhoneNumber = "+2348000000001",
+                    Country = "Nigeria", City = "Abuja", State = "FCT",
+                    OwnerId = users["superadmin@apexbuild.io"].Id,
+                    IsActive = true, IsVerified = true, VerifiedAt = DateTime.UtcNow, CreatedAt = DateTime.UtcNow,
+                };
+                await _unitOfWork.Organizations.AddAsync(superDirect, ct);
             }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error occurred during database seeding");
-
-            }
-
-            _logger.LogInformation($"Seeded {_organizations.Count} organizations");
+            result["SuperAdminDirect"] = superDirect;
+            await _unitOfWork.SaveChangesAsync(ct);
+            _logger.LogInformation("Seeded {Count} organizations.", result.Count);
+            return result;
         }
 
-        private async Task SeedSubscriptionsAsync(CancellationToken cancellationToken)
+        // ============================================================
+        //  ORGANIZATION MEMBERS
+        // ============================================================
+        private async Task SeedOrganizationMembersAsync(Dictionary<string, Organization> orgs, Dictionary<string, User> users, CancellationToken ct)
+        {
+            _logger.LogInformation("Seeding organization members...");
+            var memberships = new[]
+            {
+                new { OrgKey = "OkaforBuilds",     Email = "james.okafor@mailinator.com",  Position = "Managing Director"     },
+                new { OrgKey = "OkaforBuilds",     Email = "tony.adeyemi@mailinator.com",   Position = "Project Administrator" },
+                new { OrgKey = "OkaforBuilds",     Email = "grace.eze@mailinator.com",      Position = "Project Owner"         },
+                new { OrgKey = "OkaforBuilds",     Email = "rita.obi@mailinator.com",        Position = "Department Supervisor" },
+                new { OrgKey = "OkaforBuilds",     Email = "samuel.king@mailinator.com",    Position = "Department Supervisor" },
+                new { OrgKey = "OkaforBuilds",     Email = "dan.foster@mailinator.com",     Position = "Field Worker"          },
+                new { OrgKey = "OkaforBuilds",     Email = "ken.park@mailinator.com",       Position = "Contractor Admin"      },
+                new { OrgKey = "OkaforBuilds",     Email = "fatima.bello@mailinator.com",   Position = "Field Worker"          },
+                new { OrgKey = "OkaforBuilds",     Email = "david.osei@mailinator.com",     Position = "Contractor Admin"      },
+                new { OrgKey = "OkaforBuilds",     Email = "amaka.nwosu@mailinator.com",    Position = "Department Supervisor" },
+                new { OrgKey = "OkaforBuilds",     Email = "michael.chen@mailinator.com",   Position = "Observer"              },
+                new { OrgKey = "StonePartners",    Email = "linda.stone@mailinator.com",    Position = "Managing Director"     },
+                new { OrgKey = "StonePartners",    Email = "michael.chen@mailinator.com",   Position = "Project Administrator" },
+                new { OrgKey = "StonePartners",    Email = "chloe.west@mailinator.com",     Position = "Department Supervisor" },
+                new { OrgKey = "StonePartners",    Email = "samuel.king@mailinator.com",    Position = "Field Worker"          },
+                new { OrgKey = "SuperAdminDirect", Email = "superadmin@apexbuild.io",       Position = "Super Administrator"   },
+                new { OrgKey = "SuperAdminDirect", Email = "linda.stone@mailinator.com",    Position = "Project Administrator" },
+            };
+            foreach (var m in memberships)
+            {
+                var org = orgs[m.OrgKey]; var user = users[m.Email];
+                if (await _unitOfWork.OrganizationMembers.AnyAsync(om => om.OrganizationId == org.Id && om.UserId == user.Id, ct)) continue;
+                await _unitOfWork.OrganizationMembers.AddAsync(new OrganizationMember
+                {
+                    Id = Guid.NewGuid(), OrganizationId = org.Id, UserId = user.Id,
+                    Position = m.Position, IsActive = true, JoinedAt = DateTime.UtcNow, CreatedAt = DateTime.UtcNow,
+                }, ct);
+            }
+            await _unitOfWork.SaveChangesAsync(ct);
+            _logger.LogInformation("Seeded organization members.");
+        }
+
+        // ============================================================
+        //  SUBSCRIPTIONS
+        // ============================================================
+        private async Task SeedSubscriptionsAsync(Dictionary<string, Organization> orgs, Dictionary<string, User> users, CancellationToken ct)
         {
             _logger.LogInformation("Seeding subscriptions...");
-
-            var subscriptionData = new[]
-            {
-                new { OrgCode = "TBC", Licenses = 10, Billing = SubscriptionBillingCycle.Monthly },
-                new { OrgCode = "BPS", Licenses = 5, Billing = SubscriptionBillingCycle.Monthly },
-                new { OrgCode = "CCL", Licenses = 5, Billing = SubscriptionBillingCycle.Annual }
-            };
-
-            foreach (var subData in subscriptionData)
-            {
-                var organization = _organizations.First(o => o.Code == subData.OrgCode);
-
-                var subscription = new Subscription
-                {
-                    OrganizationId = organization.Id,
-                    UserId = organization.OwnerId,
-                    NumberOfLicenses = subData.Licenses,
-                    LicensesUsed = 0,
-                    LicenseCostPerMonth = 10m,
-                    Status = SubscriptionStatus.Active,
-                    BillingCycle = subData.Billing,
-                    BillingStartDate = DateTime.UtcNow.AddDays(-30),
-                    BillingEndDate = DateTime.UtcNow.AddMonths(subData.Billing == SubscriptionBillingCycle.Monthly ? 1 : 12),
-                    NextBillingDate = DateTime.UtcNow.AddMonths(subData.Billing == SubscriptionBillingCycle.Monthly ? 1 : 12),
-                    AutoRenew = true,
-                    IsTrialPeriod = false,
-                    Amount = subData.Licenses * 10m
-                };
-
-                _subscriptions.Add(subscription);
-                await _unitOfWork.Subscriptions.AddAsync(subscription, cancellationToken);
-            }
-
-            try
-            {
-                await _unitOfWork.SaveChangesAsync(cancellationToken);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error occurred during database seeding");
-
-            }
-
-            _logger.LogInformation($"Seeded {_subscriptions.Count} subscriptions");
+            if (!await _unitOfWork.Subscriptions.AnyAsync(s => s.OrganizationId == orgs["OkaforBuilds"].Id, ct))
+                await _unitOfWork.Subscriptions.AddAsync(new Subscription {
+                    Id = Guid.NewGuid(), OrganizationId = orgs["OkaforBuilds"].Id,
+                    UserId = users["james.okafor@mailinator.com"].Id,
+                    UserMonthlyRate = 20m, ActiveUserCount = 6, IsFreePlan = false,
+                    Status = SubscriptionStatus.Active, BillingCycle = SubscriptionBillingCycle.Monthly,
+                    BillingStartDate = DateTime.UtcNow, BillingEndDate = DateTime.UtcNow.AddMonths(1),
+                    NextBillingDate = DateTime.UtcNow.AddMonths(1), Amount = 6 * 20m,
+                    AutoRenew = true, CreatedAt = DateTime.UtcNow,
+                }, ct);
+            if (!await _unitOfWork.Subscriptions.AnyAsync(s => s.OrganizationId == orgs["StonePartners"].Id, ct))
+                await _unitOfWork.Subscriptions.AddAsync(new Subscription {
+                    Id = Guid.NewGuid(), OrganizationId = orgs["StonePartners"].Id,
+                    UserId = users["linda.stone@mailinator.com"].Id,
+                    UserMonthlyRate = 20m, ActiveUserCount = 4, IsFreePlan = false,
+                    Status = SubscriptionStatus.Active, BillingCycle = SubscriptionBillingCycle.Monthly,
+                    BillingStartDate = DateTime.UtcNow, BillingEndDate = DateTime.UtcNow.AddMonths(1),
+                    NextBillingDate = DateTime.UtcNow.AddMonths(1), Amount = 4 * 20m,
+                    AutoRenew = true, CreatedAt = DateTime.UtcNow,
+                }, ct);
+            if (!await _unitOfWork.Subscriptions.AnyAsync(s => s.OrganizationId == orgs["SuperAdminDirect"].Id, ct))
+                await _unitOfWork.Subscriptions.AddAsync(new Subscription {
+                    Id = Guid.NewGuid(), OrganizationId = orgs["SuperAdminDirect"].Id,
+                    UserId = users["superadmin@apexbuild.io"].Id,
+                    UserMonthlyRate = 0m, ActiveUserCount = 0, IsFreePlan = true,
+                    Status = SubscriptionStatus.Active, BillingCycle = SubscriptionBillingCycle.Monthly,
+                    BillingStartDate = DateTime.UtcNow, BillingEndDate = DateTime.UtcNow.AddMonths(1),
+                    NextBillingDate = DateTime.UtcNow.AddMonths(1), Amount = 0m,
+                    AutoRenew = true, CreatedAt = DateTime.UtcNow,
+                }, ct);
+            await _unitOfWork.SaveChangesAsync(ct);
+            _logger.LogInformation("Seeded subscriptions.");
         }
 
-        private async Task SeedOrganizationMembersAndLicensesAsync(CancellationToken cancellationToken)
-        {
-            _logger.LogInformation("Seeding organization members and licenses...");
-
-            // TechBuild Corp members (usertest001-006)
-            // usertest001 is SuperAdmin(Global) + Owner(OrgRole from prev step). Here we add him as member. Position matches.
-            await AddOrgMemberWithLicense("TBC", "usertest001@mailinator.com", "CEO", RoleType.ContractorAdmin, cancellationToken); // Already added as owner, but ensure consistency
-            await AddOrgMemberWithLicense("TBC", "usertest002@mailinator.com", "Platform Manager", RoleType.PlatformAdmin, cancellationToken); // PlatformAdmin global, maybe also org admin?
-            await AddOrgMemberWithLicense("TBC", "usertest003@mailinator.com", "Project Owner", RoleType.ProjectOwner, cancellationToken);
-            await AddOrgMemberWithLicense("TBC", "usertest004@mailinator.com", "Project Manager", RoleType.ProjectAdministrator, cancellationToken);
-            await AddOrgMemberWithLicense("TBC", "usertest005@mailinator.com", "Electrical Supervisor", RoleType.DepartmentSupervisor, cancellationToken);
-            await AddOrgMemberWithLicense("TBC", "usertest006@mailinator.com", "Electrician", RoleType.FieldWorker, cancellationToken);
-
-            // BuildPro Solutions members (usertest007-009)
-            await AddOrgMemberWithLicense("BPS", "usertest007@mailinator.com", "Contractor CEO", RoleType.ContractorAdmin, cancellationToken);
-            await AddOrgMemberWithLicense("BPS", "usertest008@mailinator.com", "Plumbing Supervisor", RoleType.DepartmentSupervisor, cancellationToken);
-            await AddOrgMemberWithLicense("BPS", "usertest009@mailinator.com", "Plumber", RoleType.FieldWorker, cancellationToken);
-
-            // ConstructCo Ltd members (usertest010-012)
-            await AddOrgMemberWithLicense("CCL", "usertest010@mailinator.com", "Owner", RoleType.ProjectOwner, cancellationToken);
-            await AddOrgMemberWithLicense("CCL", "usertest011@mailinator.com", "HVAC Supervisor", RoleType.DepartmentSupervisor, cancellationToken);
-            await AddOrgMemberWithLicense("CCL", "usertest012@mailinator.com", "Inspector", RoleType.Observer, cancellationToken);
-
-            await _unitOfWork.SaveChangesAsync(cancellationToken);
-            _logger.LogInformation("Seeded organization members and licenses");
-        }
-
-        private async Task AddOrgMemberWithLicense(string orgCode, string userEmail, string position, RoleType roleType, CancellationToken cancellationToken)
-        {
-            var organization = _organizations.First(o => o.Code == orgCode);
-            var user = _users.First(u => u.Email == userEmail);
-            var subscription = _subscriptions.First(s => s.OrganizationId == organization.Id);
-
-            // Add organization member
-            var member = new OrganizationMember
-            {
-                OrganizationId = organization.Id,
-                UserId = user.Id,
-                Position = position,
-                IsActive = true,
-                JoinedAt = DateTime.UtcNow
-            };
-            await _unitOfWork.OrganizationMembers.AddAsync(member, cancellationToken);
-
-            // Check if UserRole already exists for this Org (avoid duplicates from Owner assignment or repeated calls)
-            var role = _roles.First(r => r.RoleType == roleType);
-            var existingUserRole = await _unitOfWork.UserRoles.FindAsync(ur => 
-                ur.UserId == user.Id && 
-                ur.OrganizationId == organization.Id && 
-                ur.RoleId == role.Id, cancellationToken);
-
-            if (!existingUserRole.Any())
-            {
-                var userRole = new UserRole
-                {
-                    UserId = user.Id,
-                    RoleId = role.Id,
-                    OrganizationId = organization.Id,
-                    IsActive = true,
-                    ActivatedAt = DateTime.UtcNow
-                };
-                await _unitOfWork.UserRoles.AddAsync(userRole, cancellationToken);
-            }
-
-            // Add license
-            var license = new OrganizationLicense
-            {
-                OrganizationId = organization.Id,
-                UserId = user.Id,
-                SubscriptionId = subscription.Id,
-                LicenseKey = $"LIC-{orgCode}-{user.Email.Split('@')[0].ToUpper()}",
-                Status = LicenseStatus.Active,
-                AssignedAt = DateTime.UtcNow,
-                ValidFrom = DateTime.UtcNow,
-                ValidUntil = subscription.BillingEndDate,
-                LicenseType = "Full"
-            };
-            await _unitOfWork.OrganizationLicenses.AddAsync(license, cancellationToken);
-
-            // Update subscription licenses used
-            subscription.LicensesUsed++;
-        }
-
-        private async Task SeedProjectsAsync(CancellationToken cancellationToken)
+        // ============================================================
+        //  PROJECTS
+        // ============================================================
+        private async Task<Dictionary<string, Project>> SeedProjectsAsync(Dictionary<string, Organization> orgs, Dictionary<string, User> users, CancellationToken ct)
         {
             _logger.LogInformation("Seeding projects...");
+            var result = new Dictionary<string, Project>();
 
-            var projectData = new[]
+            // Project 1: Eko Atlantic Tower
+            var proj1 = await _unitOfWork.Projects.FirstOrDefaultAsync(p => p.Code == "PROJ-2025-001", ct);
+            if (proj1 == null)
             {
-                new { Name = "Commercial Office Building", Code = "PROJ-2025-001", OrgCode = "TBC", OwnerEmail = "usertest003@mailinator.com", AdminEmail = "usertest004@mailinator.com", Status = ProjectStatus.Active, Type = "Commercial Building" },
-                new { Name = "Shopping Mall Renovation", Code = "PROJ-2025-002", OrgCode = "TBC", OwnerEmail = "usertest003@mailinator.com", AdminEmail = "usertest004@mailinator.com", Status = ProjectStatus.Active, Type = "Renovation" },
-                new { Name = "Residential Complex", Code = "PROJ-2025-003", OrgCode = "BPS", OwnerEmail = "usertest007@mailinator.com", AdminEmail = "usertest007@mailinator.com", Status = ProjectStatus.Planning, Type = "Residential" },
-                new { Name = "Highway Bridge", Code = "PROJ-2025-004", OrgCode = "CCL", OwnerEmail = "usertest010@mailinator.com", AdminEmail = "usertest010@mailinator.com", Status = ProjectStatus.Active, Type = "Infrastructure" },
-                new { Name = "School Building", Code = "PROJ-2025-005", OrgCode = "TBC", OwnerEmail = "usertest003@mailinator.com", AdminEmail = "usertest004@mailinator.com", Status = ProjectStatus.Completed, Type = "Educational" },
-                new { Name = "Hospital Wing", Code = "PROJ-2025-006", OrgCode = "BPS", OwnerEmail = "usertest007@mailinator.com", AdminEmail = "usertest007@mailinator.com", Status = ProjectStatus.OnHold, Type = "Healthcare" }
-            };
-
-            // Sample project images
-            var projectImages = new List<string>
-            {
-                "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=1200",
-                "https://images.unsplash.com/photo-1503387762-592deb58ef4e?w=1200",
-                "https://images.unsplash.com/photo-1541888946425-d81bb19240f5?w=1200",
-                "https://images.unsplash.com/photo-1504307651254-35680f356dfd?w=1200",
-                "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?w=1200",
-                "https://images.unsplash.com/photo-1590496793907-4c5de0f2e254?w=1200"
-            };
-
-            foreach (var projData in projectData)
-            {
-                var owner = _users.First(u => u.Email == projData.OwnerEmail);
-                var admin = _users.First(u => u.Email == projData.AdminEmail);
-
-                var org = _organizations.First(o => o.Code == projData.OrgCode);
-
-                var project = new Project
-                {
-                    Name = projData.Name,
-                    Code = projData.Code,
-                    Description = $"{projData.Type} project with comprehensive scope and requirements.",
-                    Status = projData.Status,
-                    ProjectType = projData.Type,
-                    Location = "New York, USA",
-                    StartDate = DateTime.UtcNow.AddDays(-60),
-                    ExpectedEndDate = DateTime.UtcNow.AddMonths(6),
-                    Budget = Random.Shared.Next(500000, 5000000),
-                    Currency = "USD",
-                    OrganizationId = org.Id,
-                    ProjectOwnerId = owner.Id,
-                    ProjectAdminId = admin.Id,
-                    IsActive = projData.Status != ProjectStatus.Cancelled,
-                    ImageUrls = new List<string> { projectImages[Random.Shared.Next(projectImages.Count)] }
+                proj1 = new Project {
+                    Id = Guid.NewGuid(), Name = "Eko Atlantic Tower", Code = "PROJ-2025-001",
+                    OrganizationId = orgs["OkaforBuilds"].Id,
+                    Description = "A landmark 40-story mixed-use tower on Eko Atlantic City, Lagos Island.",
+                    Status = ProjectStatus.Active, ProjectType = ProjectType.Building,
+                    Location = "Lagos Island, Lagos", IsActive = true,
+                    StartDate = D(2025, 1, 15), ExpectedEndDate = D(2027, 6, 30),
+                    Budget = 850_000_000m, Currency = "NGN",
+                    ProjectOwnerId = users["james.okafor@mailinator.com"].Id,
+                    ProjectAdminId = users["tony.adeyemi@mailinator.com"].Id,
+                    CreatedAt = DateTime.UtcNow,
                 };
-
-                _projects.Add(project);
-                await _unitOfWork.Projects.AddAsync(project, cancellationToken);
+                await _unitOfWork.Projects.AddAsync(proj1, ct);
             }
+            result["EkoAtlantic"] = proj1;
 
-
-            try
+            // Project 2: Abuja Ring Road Extension
+            var proj2 = await _unitOfWork.Projects.FirstOrDefaultAsync(p => p.Code == "PROJ-2025-002", ct);
+            if (proj2 == null)
             {
-                await _unitOfWork.SaveChangesAsync(cancellationToken);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error occurred during database seeding");
-
-            }
-            
-            _logger.LogInformation($"Seeded {_projects.Count} projects");
-        }
-
-        private async Task SeedProjectUsersAndRolesAsync(CancellationToken cancellationToken)
-        {
-            _logger.LogInformation("Seeding project users and roles...");
-
-            // Commercial Office Building - Add team members
-            await AddProjectUser("PROJ-2025-001", "usertest003@mailinator.com", RoleType.ProjectOwner, cancellationToken);
-            await AddProjectUser("PROJ-2025-001", "usertest004@mailinator.com", RoleType.ProjectAdministrator, cancellationToken);
-            await AddProjectUser("PROJ-2025-001", "usertest005@mailinator.com", RoleType.DepartmentSupervisor, cancellationToken);
-            await AddProjectUser("PROJ-2025-001", "usertest006@mailinator.com", RoleType.FieldWorker, cancellationToken);
-
-            // Shopping Mall Renovation
-            await AddProjectUser("PROJ-2025-002", "usertest003@mailinator.com", RoleType.ProjectOwner, cancellationToken);
-            await AddProjectUser("PROJ-2025-002", "usertest004@mailinator.com", RoleType.ProjectAdministrator, cancellationToken);
-
-            // Residential Complex
-            await AddProjectUser("PROJ-2025-003", "usertest007@mailinator.com", RoleType.ProjectOwner, cancellationToken);
-            await AddProjectUser("PROJ-2025-003", "usertest008@mailinator.com", RoleType.DepartmentSupervisor, cancellationToken);
-            await AddProjectUser("PROJ-2025-003", "usertest009@mailinator.com", RoleType.FieldWorker, cancellationToken);
-
-            // Highway Bridge
-            await AddProjectUser("PROJ-2025-004", "usertest010@mailinator.com", RoleType.ProjectOwner, cancellationToken);
-            await AddProjectUser("PROJ-2025-004", "usertest011@mailinator.com", RoleType.DepartmentSupervisor, cancellationToken);
-            await AddProjectUser("PROJ-2025-004", "usertest012@mailinator.com", RoleType.Observer, cancellationToken);
-
-            // School Building
-            await AddProjectUser("PROJ-2025-005", "usertest003@mailinator.com", RoleType.ProjectOwner, cancellationToken);
-            await AddProjectUser("PROJ-2025-005", "usertest004@mailinator.com", RoleType.ProjectAdministrator, cancellationToken);
-
-            // Hospital Wing
-            await AddProjectUser("PROJ-2025-006", "usertest007@mailinator.com", RoleType.ProjectOwner, cancellationToken);
-
-            await _unitOfWork.SaveChangesAsync(cancellationToken);
-            _logger.LogInformation("Seeded project users and roles");
-        }
-
-        private async Task AddProjectUser(string projectCode, string userEmail, RoleType roleType, CancellationToken cancellationToken)
-        {
-            var project = _projects.First(p => p.Code == projectCode);
-            var user = _users.First(u => u.Email == userEmail);
-            var role = _roles.First(r => r.RoleType == roleType);
-
-            // Add ProjectUser
-            var projectUser = new ProjectUser
-            {
-                ProjectId = project.Id,
-                UserId = user.Id,
-                RoleId = role.Id,
-                Status = ProjectUserStatus.Active,
-                JoinedAt = DateTime.UtcNow,
-                IsActive = true
-            };
-            await _unitOfWork.ProjectUsers.AddAsync(projectUser, cancellationToken);
-
-            // Check if UserRole already exists for this combination
-            var existingUserRole = user.UserRoles.FirstOrDefault(ur =>
-                ur.RoleId == role.Id &&
-                ur.ProjectId == project.Id);
-
-            if (existingUserRole == null)
-            {
-                var userRole = new UserRole
-                {
-                    UserId = user.Id,
-                    RoleId = role.Id,
-                    ProjectId = project.Id,
-                    OrganizationId = project.OrganizationId, // Ensure Project Roles are also linked to the Organization
-                    IsActive = true,
-                    ActivatedAt = DateTime.UtcNow
+                proj2 = new Project {
+                    Id = Guid.NewGuid(), Name = "Abuja Ring Road Extension", Code = "PROJ-2025-002",
+                    OrganizationId = orgs["OkaforBuilds"].Id,
+                    Description = "Extension of the Abuja ring road to ease traffic congestion in the FCT.",
+                    Status = ProjectStatus.Active, ProjectType = ProjectType.Road,
+                    Location = "FCT, Abuja", IsActive = true,
+                    StartDate = D(2025, 3, 1), ExpectedEndDate = D(2028, 12, 31),
+                    Budget = 2_400_000_000m, Currency = "NGN",
+                    ProjectOwnerId = users["grace.eze@mailinator.com"].Id,
+                    ProjectAdminId = users["james.okafor@mailinator.com"].Id,
+                    CreatedAt = DateTime.UtcNow,
                 };
-                await _unitOfWork.UserRoles.AddAsync(userRole, cancellationToken);
+                await _unitOfWork.Projects.AddAsync(proj2, ct);
             }
+            result["AbujaRingRoad"] = proj2;
+
+            // Project 3: Lagos State Hospital Renovation
+            var proj3 = await _unitOfWork.Projects.FirstOrDefaultAsync(p => p.Code == "PROJ-2025-003", ct);
+            if (proj3 == null)
+            {
+                proj3 = new Project {
+                    Id = Guid.NewGuid(), Name = "Lagos State Hospital Renovation", Code = "PROJ-2025-003",
+                    OrganizationId = orgs["StonePartners"].Id,
+                    Description = "Comprehensive renovation and upgrade of Lagos State General Hospital, Ikeja.",
+                    Status = ProjectStatus.Active, ProjectType = ProjectType.Hospital,
+                    Location = "Ikeja, Lagos", IsActive = true,
+                    StartDate = D(2025, 2, 1), ExpectedEndDate = D(2026, 8, 31),
+                    Budget = 320_000_000m, Currency = "NGN",
+                    ProjectOwnerId = users["linda.stone@mailinator.com"].Id,
+                    ProjectAdminId = users["michael.chen@mailinator.com"].Id,
+                    CreatedAt = DateTime.UtcNow,
+                };
+                await _unitOfWork.Projects.AddAsync(proj3, ct);
+            }
+            result["HospitalReno"] = proj3;
+
+            // Project 4: Presidential Garden Park
+            var proj4 = await _unitOfWork.Projects.FirstOrDefaultAsync(p => p.Code == "PROJ-2025-004", ct);
+            if (proj4 == null)
+            {
+                proj4 = new Project {
+                    Id = Guid.NewGuid(), Name = "Presidential Garden Park", Code = "PROJ-2025-004",
+                    OrganizationId = orgs["SuperAdminDirect"].Id,
+                    Description = "Development of the Presidential Garden and recreational park in Abuja.",
+                    Status = ProjectStatus.Planning, ProjectType = ProjectType.Park,
+                    Location = "Abuja", IsActive = true,
+                    Budget = 75_000_000m, Currency = "NGN",
+                    ProjectOwnerId = users["superadmin@apexbuild.io"].Id,
+                    ProjectAdminId = users["linda.stone@mailinator.com"].Id,
+                    CreatedAt = DateTime.UtcNow,
+                };
+                await _unitOfWork.Projects.AddAsync(proj4, ct);
+            }
+            result["PresidentialGarden"] = proj4;
+
+            await _unitOfWork.SaveChangesAsync(ct);
+            _logger.LogInformation("Seeded {Count} projects.", result.Count);
+            return result;
         }
 
-        private async Task SeedDepartmentsAsync(CancellationToken cancellationToken)
+        // ============================================================
+        //  DEPARTMENTS
+        // ============================================================
+        private async Task<Dictionary<string, Department>> SeedDepartmentsAsync(Dictionary<string, Project> projects, Dictionary<string, User> users, CancellationToken ct)
         {
             _logger.LogInformation("Seeding departments...");
+            var result = new Dictionary<string, Department>();
 
-            // Commercial Office Building departments
-            await AddDepartment("PROJ-2025-001", "Electrical", "DEPT-ELE-001", "usertest005@mailinator.com", "Electrical Systems", cancellationToken);
-            await AddDepartment("PROJ-2025-001", "Plumbing", "DEPT-PLU-001", "usertest008@mailinator.com", "Plumbing Systems", cancellationToken);
-            await AddDepartment("PROJ-2025-001", "HVAC", "DEPT-HVAC-001", "usertest011@mailinator.com", "HVAC Systems", cancellationToken);
-
-            // Shopping Mall Renovation
-            await AddDepartment("PROJ-2025-002", "Structural", "DEPT-STR-001", "usertest005@mailinator.com", "Structural Engineering", cancellationToken);
-            await AddDepartment("PROJ-2025-002", "Finishing", "DEPT-FIN-001", "usertest008@mailinator.com", "Interior Finishing", cancellationToken);
-
-            // Residential Complex
-            await AddDepartment("PROJ-2025-003", "Foundation", "DEPT-FND-001", "usertest008@mailinator.com", "Foundation Work", cancellationToken);
-            await AddDepartment("PROJ-2025-003", "Framing", "DEPT-FRM-001", "usertest009@mailinator.com", "Framing and Structure", cancellationToken);
-
-            // Highway Bridge
-            await AddDepartment("PROJ-2025-004", "Concrete", "DEPT-CON-001", "usertest011@mailinator.com", "Concrete Work", cancellationToken);
-            await AddDepartment("PROJ-2025-004", "Steel", "DEPT-STL-001", "usertest011@mailinator.com", "Steel Structure", cancellationToken);
-
-            // School Building
-            await AddDepartment("PROJ-2025-005", "Interior", "DEPT-INT-001", "usertest005@mailinator.com", "Interior Work", cancellationToken);
-            await AddDepartment("PROJ-2025-005", "Exterior", "DEPT-EXT-001", "usertest005@mailinator.com", "Exterior Work", cancellationToken);
-
-            // Hospital Wing
-            await AddDepartment("PROJ-2025-006", "Medical Systems", "DEPT-MED-001", "usertest008@mailinator.com", "Medical Equipment Installation", cancellationToken);
-
-            await _unitOfWork.SaveChangesAsync(cancellationToken);
-            _logger.LogInformation($"Seeded {_departments.Count} departments");
-        }
-
-        private async Task AddDepartment(string projectCode, string name, string code, string supervisorEmail, string specialization, CancellationToken cancellationToken)
-        {
-            var project = _projects.First(p => p.Code == projectCode);
-            var supervisor = _users.First(u => u.Email == supervisorEmail);
-
-            var department = new Department
+            async Task<Department> EnsureDept(string key, string code, string name, Guid projId, Guid supId, bool isOut, string spec, DateTime start)
             {
-                Name = name,
-                Code = code,
-                Description = $"{specialization} department for {project.Name}",
-                ProjectId = project.Id,
-                OrganizationId = project.OrganizationId,
-                SupervisorId = supervisor.Id,
-                Status = DepartmentStatus.Active,
-                StartDate = DateTime.UtcNow.AddDays(-30),
-                IsActive = true,
-                IsOutsourced = false,
-                Specialization = specialization
-            };
+                var dept = await _unitOfWork.Departments.FirstOrDefaultAsync(x => x.Code == code, ct);
+                if (dept != null) { result[key] = dept; return dept; }
+                dept = new Department {
+                    Id = Guid.NewGuid(), Name = name, Code = code, ProjectId = projId,
+                    SupervisorId = supId, IsOutsourced = isOut, Specialization = spec,
+                    Status = DepartmentStatus.Active, IsActive = true, StartDate = start, CreatedAt = DateTime.UtcNow,
+                };
+                await _unitOfWork.Departments.AddAsync(dept, ct);
+                result[key] = dept;
+                return dept;
+            }
 
-            _departments.Add(department);
-            await _unitOfWork.Departments.AddAsync(department, cancellationToken);
+            // Eko Atlantic Tower departments
+            var ekoId = projects["EkoAtlantic"].Id;
+            await EnsureDept("StructuralEng", "DEPT-STR-001", "Structural Engineering",  ekoId, users["tony.adeyemi@mailinator.com"].Id,  false, "Structural Engineering", D(2025, 1, 15));
+            await EnsureDept("ElectricalSys", "DEPT-ELE-001", "Electrical Systems",      ekoId, users["rita.obi@mailinator.com"].Id,       true,  "Electrical",             D(2025, 1, 15));
+            await EnsureDept("PlumbingUtil",  "DEPT-PLU-001", "Plumbing & Utilities",    ekoId, users["samuel.king@mailinator.com"].Id,    true,  "Plumbing",               D(2025, 1, 15));
+            await EnsureDept("InteriorFin",   "DEPT-INT-001", "Interior Finishing",      ekoId, users["amaka.nwosu@mailinator.com"].Id,    false, "Interior Finishing",     D(2025, 1, 15));
+
+            // Abuja Ring Road departments
+            var roadId = projects["AbujaRingRoad"].Id;
+            await EnsureDept("FoundationEarth", "DEPT-FND-001", "Foundation & Earthworks", roadId, users["dan.foster@mailinator.com"].Id, false, "Earthworks",        D(2025, 3, 1));
+            await EnsureDept("RoadConstruct",   "DEPT-RDC-001", "Road Construction",       roadId, users["ken.park@mailinator.com"].Id,   true,  "Road Construction", D(2025, 3, 1));
+
+            // Hospital Renovation departments
+            var hospId = projects["HospitalReno"].Id;
+            await EnsureDept("MedicalSystems", "DEPT-MED-001", "Medical Systems", hospId, users["chloe.west@mailinator.com"].Id,   false, "Medical Systems",   D(2025, 2, 1));
+            await EnsureDept("CivilWorks",     "DEPT-CIV-001", "Civil Works",     hospId, users["michael.chen@mailinator.com"].Id, false, "Civil Engineering", D(2025, 2, 1));
+
+            await _unitOfWork.SaveChangesAsync(ct);
+            _logger.LogInformation("Seeded {Count} departments.", result.Count);
+            return result;
         }
 
-        private async Task SeedWorkInfosAsync(CancellationToken cancellationToken)
+        // ============================================================
+        //  CONTRACTORS
+        // ============================================================
+        private async Task<Dictionary<string, Contractor>> SeedContractorsAsync(Dictionary<string, Project> projects, Dictionary<string, Department> departments, Dictionary<string, User> users, CancellationToken ct)
         {
-            _logger.LogInformation("Seeding work info records...");
+            _logger.LogInformation("Seeding contractors...");
+            var result = new Dictionary<string, Contractor>();
 
-            // Add work info for key team members
-            await AddWorkInfo("PROJ-2025-001", "DEPT-ELE-001", "usertest005@mailinator.com", "Electrical Supervisor", "EMP-TBC-005", 75m, cancellationToken);
-            await AddWorkInfo("PROJ-2025-001", "DEPT-ELE-001", "usertest006@mailinator.com", "Electrician", "EMP-TBC-006", 45m, cancellationToken);
-
-            await AddWorkInfo("PROJ-2025-003", "DEPT-FND-001", "usertest008@mailinator.com", "Plumbing Supervisor", "EMP-BPS-008", 70m, cancellationToken);
-            await AddWorkInfo("PROJ-2025-003", "DEPT-FRM-001", "usertest009@mailinator.com", "Plumber", "EMP-BPS-009", 42m, cancellationToken);
-
-            await AddWorkInfo("PROJ-2025-004", "DEPT-CON-001", "usertest011@mailinator.com", "HVAC Supervisor", "EMP-CCL-011", 72m, cancellationToken);
-
-            await _unitOfWork.SaveChangesAsync(cancellationToken);
-            _logger.LogInformation("Seeded work info records");
-        }
-
-
-        private async Task AddWorkInfo(string projectCode, string deptCode, string userEmail, string position, string employeeId, decimal hourlyRate, CancellationToken cancellationToken)
-        {
-            var project = _projects.First(p => p.Code == projectCode);
-            var department = _departments.First(d => d.Code == deptCode);
-            var user = _users.First(u => u.Email == userEmail);
-
-            // FIX: Use the project's OrganizationId directly instead of trying to find by owner
-            var org = _organizations.First(o => o.Id == project.OrganizationId);
-
-            var workInfo = new WorkInfo
+            // FastWire Electricals
+            var fw = await _unitOfWork.Contractors.FirstOrDefaultAsync(c => c.Code == "CONTR-2025-001", ct);
+            if (fw == null)
             {
-                UserId = user.Id,
-                ProjectId = project.Id,
-                OrganizationId = org.Id,
-                DepartmentId = department.Id,
-                Position = position,
-                EmployeeId = employeeId,
-                StartDate = DateTime.UtcNow.AddDays(-60),
-                Status = ProjectUserStatus.Active,
-                IsActive = true,
-                Responsibilities = $"Responsible for {position.ToLower()} duties and team coordination.",
-                HourlyRate = hourlyRate,
-                ContractType = "FullTime"
-            };
+                fw = new Contractor {
+                    Id = Guid.NewGuid(), CompanyName = "FastWire Electricals Ltd", Code = "CONTR-2025-001",
+                    ProjectId = projects["EkoAtlantic"].Id, DepartmentId = departments["ElectricalSys"].Id,
+                    ContractorAdminId = users["ken.park@mailinator.com"].Id,
+                    Specialization = "Electrical",
+                    Description = "Specialist electrical contractor for the Eko Atlantic Tower project.",
+                    ContractStartDate = D(2025, 3, 1), ContractEndDate = D(2026, 9, 30),
+                    ContractValue = 45_000_000m, Currency = "NGN", Status = ContractorStatus.Active, CreatedAt = DateTime.UtcNow,
+                };
+                await _unitOfWork.Contractors.AddAsync(fw, ct);
+            }
+            result["FastWire"] = fw;
 
-            await _unitOfWork.WorkInfos.AddAsync(workInfo, cancellationToken);
+            // AquaTech Ltd
+            var at = await _unitOfWork.Contractors.FirstOrDefaultAsync(c => c.Code == "CONTR-2025-002", ct);
+            if (at == null)
+            {
+                at = new Contractor {
+                    Id = Guid.NewGuid(), CompanyName = "AquaTech Plumbing Solutions", Code = "CONTR-2025-002",
+                    ProjectId = projects["EkoAtlantic"].Id, DepartmentId = departments["PlumbingUtil"].Id,
+                    ContractorAdminId = users["david.osei@mailinator.com"].Id,
+                    Specialization = "Plumbing",
+                    Description = "Specialist plumbing and utilities contractor for Eko Atlantic Tower.",
+                    ContractStartDate = D(2025, 4, 1), ContractEndDate = D(2026, 6, 30),
+                    ContractValue = 28_000_000m, Currency = "NGN", Status = ContractorStatus.Active, CreatedAt = DateTime.UtcNow,
+                };
+                await _unitOfWork.Contractors.AddAsync(at, ct);
+            }
+            result["AquaTech"] = at;
+
+            // RoadMaster Co.
+            var rm = await _unitOfWork.Contractors.FirstOrDefaultAsync(c => c.Code == "CONTR-2025-003", ct);
+            if (rm == null)
+            {
+                rm = new Contractor {
+                    Id = Guid.NewGuid(), CompanyName = "RoadMaster Construction Co.", Code = "CONTR-2025-003",
+                    ProjectId = projects["AbujaRingRoad"].Id, DepartmentId = departments["RoadConstruct"].Id,
+                    ContractorAdminId = users["fatima.bello@mailinator.com"].Id,
+                    Specialization = "Road Construction",
+                    Description = "Major road construction contractor for the Abuja Ring Road Extension.",
+                    ContractStartDate = D(2025, 6, 1), ContractEndDate = D(2028, 11, 30),
+                    ContractValue = 980_000_000m, Currency = "NGN", Status = ContractorStatus.Active, CreatedAt = DateTime.UtcNow,
+                };
+                await _unitOfWork.Contractors.AddAsync(rm, ct);
+            }
+            result["RoadMaster"] = rm;
+
+            await _unitOfWork.SaveChangesAsync(ct);
+            _logger.LogInformation("Seeded {Count} contractors.", result.Count);
+            return result;
         }
 
-        private async Task SeedTasksAsync(CancellationToken cancellationToken)
+        // ============================================================
+        //  LINK DEPARTMENTS TO CONTRACTORS
+        // ============================================================
+        private async Task LinkDepartmentsToContractorsAsync(Dictionary<string, Department> departments, Dictionary<string, Contractor> contractors, CancellationToken ct)
+        {
+            _logger.LogInformation("Linking departments to contractors...");
+            var elec = departments["ElectricalSys"];
+            if (elec.ContractorId == null) { elec.ContractorId = contractors["FastWire"].Id; await _unitOfWork.Departments.UpdateAsync(elec, ct); }
+            var plumb = departments["PlumbingUtil"];
+            if (plumb.ContractorId == null) { plumb.ContractorId = contractors["AquaTech"].Id; await _unitOfWork.Departments.UpdateAsync(plumb, ct); }
+            var road = departments["RoadConstruct"];
+            if (road.ContractorId == null) { road.ContractorId = contractors["RoadMaster"].Id; await _unitOfWork.Departments.UpdateAsync(road, ct); }
+            await _unitOfWork.SaveChangesAsync(ct);
+            _logger.LogInformation("Linked departments to contractors.");
+        }
+
+        // ============================================================
+        //  PROJECT MILESTONES
+        // ============================================================
+        private async Task<Dictionary<string, ProjectMilestone>> SeedMilestonesAsync(Dictionary<string, Project> projects, CancellationToken ct)
+        {
+            _logger.LogInformation("Seeding project milestones...");
+            var result = new Dictionary<string, ProjectMilestone>();
+            var ekoId  = projects["EkoAtlantic"].Id;
+            var roadId = projects["AbujaRingRoad"].Id;
+
+            async Task<ProjectMilestone> E(string key, Guid projId, string title, string desc, DateTime due, MilestoneStatus st, decimal prog, int order, DateTime? completedAt = null)
+            {
+                var m = await _unitOfWork.Milestones.FirstOrDefaultAsync(x => x.ProjectId == projId && x.Title == title, ct);
+                if (m != null) { result[key] = m; return m; }
+                m = new ProjectMilestone {
+                    Id = Guid.NewGuid(), Title = title, Description = desc, ProjectId = projId,
+                    DueDate = due, CompletedAt = completedAt, Status = st, Progress = prog,
+                    OrderIndex = order, CreatedAt = DateTime.UtcNow,
+                };
+                await _unitOfWork.Milestones.AddAsync(m, ct);
+                result[key] = m;
+                return m;
+            }
+
+            await E("EkoFoundation",      ekoId,  "Foundation Complete",       "All foundation work including piling and ground beams completed.",                   D(2025, 9, 30), MilestoneStatus.Completed,  100, 1, D(2025, 9, 28));
+            await E("EkoStructuralFrame", ekoId,  "Structural Frame Complete", "Steel and concrete structural frame completed up to the roof level.",               D(2026, 3, 31), MilestoneStatus.InProgress, 35,  2);
+            await E("EkoMEP",             ekoId,  "MEP Rough-In Complete",     "All mechanical, electrical and plumbing rough-in work completed.",                  D(2026, 9, 30), MilestoneStatus.Upcoming,   0,   3);
+            await E("RoadEarthworks",     roadId, "Phase 1 Earthworks Done",   "Completion of all earthworks and site preparation for Phase 1 of the ring road.",  D(2026, 6, 30), MilestoneStatus.Upcoming,   0,   1);
+
+            await _unitOfWork.SaveChangesAsync(ct);
+            _logger.LogInformation("Seeded {Count} milestones.", result.Count);
+            return result;
+        }
+
+        // ============================================================
+        //  PROJECT USERS
+        // ============================================================
+        private async Task SeedProjectUsersAsync(Dictionary<string, Project> projects, Dictionary<string, User> users, Dictionary<string, Role> roles, CancellationToken ct)
+        {
+            _logger.LogInformation("Seeding project users...");
+            var assignments = new[]
+            {
+                // Eko Atlantic Tower
+                new { ProjKey = "EkoAtlantic",        Email = "james.okafor@mailinator.com",  RoleKey = "ProjectOwner"         },
+                new { ProjKey = "EkoAtlantic",        Email = "tony.adeyemi@mailinator.com",   RoleKey = "ProjectAdministrator" },
+                new { ProjKey = "EkoAtlantic",        Email = "rita.obi@mailinator.com",        RoleKey = "DepartmentSupervisor" },
+                new { ProjKey = "EkoAtlantic",        Email = "samuel.king@mailinator.com",    RoleKey = "DepartmentSupervisor" },
+                new { ProjKey = "EkoAtlantic",        Email = "amaka.nwosu@mailinator.com",    RoleKey = "DepartmentSupervisor" },
+                new { ProjKey = "EkoAtlantic",        Email = "ken.park@mailinator.com",       RoleKey = "ContractorAdmin"      },
+                new { ProjKey = "EkoAtlantic",        Email = "david.osei@mailinator.com",     RoleKey = "ContractorAdmin"      },
+                new { ProjKey = "EkoAtlantic",        Email = "fatima.bello@mailinator.com",   RoleKey = "FieldWorker"          },
+                new { ProjKey = "EkoAtlantic",        Email = "chloe.west@mailinator.com",     RoleKey = "FieldWorker"          },
+                new { ProjKey = "EkoAtlantic",        Email = "dan.foster@mailinator.com",     RoleKey = "FieldWorker"          },
+                // Abuja Ring Road
+                new { ProjKey = "AbujaRingRoad",      Email = "grace.eze@mailinator.com",      RoleKey = "ProjectOwner"         },
+                new { ProjKey = "AbujaRingRoad",      Email = "james.okafor@mailinator.com",   RoleKey = "ProjectAdministrator" },
+                new { ProjKey = "AbujaRingRoad",      Email = "dan.foster@mailinator.com",     RoleKey = "DepartmentSupervisor" },
+                new { ProjKey = "AbujaRingRoad",      Email = "ken.park@mailinator.com",       RoleKey = "DepartmentSupervisor" },
+                new { ProjKey = "AbujaRingRoad",      Email = "fatima.bello@mailinator.com",   RoleKey = "ContractorAdmin"      },
+                new { ProjKey = "AbujaRingRoad",      Email = "rita.obi@mailinator.com",        RoleKey = "FieldWorker"          },
+                new { ProjKey = "AbujaRingRoad",      Email = "michael.chen@mailinator.com",   RoleKey = "Observer"             },
+                // Hospital Renovation
+                new { ProjKey = "HospitalReno",       Email = "linda.stone@mailinator.com",    RoleKey = "ProjectOwner"         },
+                new { ProjKey = "HospitalReno",       Email = "michael.chen@mailinator.com",   RoleKey = "ProjectAdministrator" },
+                new { ProjKey = "HospitalReno",       Email = "chloe.west@mailinator.com",     RoleKey = "DepartmentSupervisor" },
+                new { ProjKey = "HospitalReno",       Email = "samuel.king@mailinator.com",    RoleKey = "FieldWorker"          },
+                // Presidential Garden
+                new { ProjKey = "PresidentialGarden", Email = "superadmin@apexbuild.io",       RoleKey = "ProjectOwner"         },
+                new { ProjKey = "PresidentialGarden", Email = "linda.stone@mailinator.com",    RoleKey = "ProjectAdministrator" },
+            };
+            foreach (var a in assignments)
+            {
+                var project = projects[a.ProjKey]; var user = users[a.Email]; var role = roles[a.RoleKey];
+                if (!await _unitOfWork.ProjectUsers.AnyAsync(pu => pu.ProjectId == project.Id && pu.UserId == user.Id, ct))
+                    await _unitOfWork.ProjectUsers.AddAsync(new ProjectUser {
+                        Id = Guid.NewGuid(), ProjectId = project.Id, UserId = user.Id, RoleId = role.Id,
+                        Status = ProjectUserStatus.Active, JoinedAt = DateTime.UtcNow, IsActive = true, CreatedAt = DateTime.UtcNow,
+                    }, ct);
+                if (!await _unitOfWork.UserRoles.AnyAsync(ur => ur.UserId == user.Id && ur.RoleId == role.Id && ur.ProjectId == project.Id, ct))
+                    await _unitOfWork.UserRoles.AddAsync(new UserRole {
+                        Id = Guid.NewGuid(), UserId = user.Id, RoleId = role.Id, ProjectId = project.Id,
+                        IsActive = true, ActivatedAt = DateTime.UtcNow, CreatedAt = DateTime.UtcNow,
+                    }, ct);
+            }
+            await _unitOfWork.SaveChangesAsync(ct);
+            _logger.LogInformation("Seeded project users and project-scoped user roles.");
+        }
+
+        // TASKS
+        // ============================================================
+        //  TASKS
+        // ============================================================
+        private async Task<Dictionary<string, ProjectTask>> SeedTasksAsync(
+            Dictionary<string, Project> projects,
+            Dictionary<string, Department> departments,
+            Dictionary<string, Contractor> contractors,
+            Dictionary<string, ProjectMilestone> milestones,
+            Dictionary<string, User> users,
+            CancellationToken ct)
         {
             _logger.LogInformation("Seeding tasks...");
+            var result = new Dictionary<string, ProjectTask>();
 
-            // Commercial Office Building - Electrical Department
-            await AddTask("DEPT-ELE-001", "Install Main Electrical Panel", "TASK-2025-001", "usertest006@mailinator.com", "usertest005@mailinator.com",
-                TaskStatus.Completed, 4, 40, cancellationToken);
-            await AddTask("DEPT-ELE-001", "Wire Floor 1-3", "TASK-2025-002", "usertest006@mailinator.com", "usertest005@mailinator.com",
-                TaskStatus.InProgress, 3, 80, cancellationToken);
-            await AddTask("DEPT-ELE-001", "Install Lighting Fixtures", "TASK-2025-003", "usertest006@mailinator.com", "usertest005@mailinator.com",
-                TaskStatus.NotStarted, 2, 60, cancellationToken);
+            async Task<ProjectTask> EnsureTask(string key, string code, ProjectTask factory)
+            {
+                var t = await _unitOfWork.Tasks.FirstOrDefaultAsync(x => x.Code == code, ct);
+                if (t != null) { result[key] = t; return t; }
+                await _unitOfWork.Tasks.AddAsync(factory, ct);
+                result[key] = factory; return factory;
+            }
 
-            // Commercial Office Building - Plumbing Department
-            await AddTask("DEPT-PLU-001", "Install Water Supply Lines", "TASK-2025-004", "usertest009@mailinator.com", "usertest008@mailinator.com",
-                TaskStatus.InProgress, 4, 50, cancellationToken);
-            await AddTask("DEPT-PLU-001", "Install Drainage System", "TASK-2025-005", "usertest009@mailinator.com", "usertest008@mailinator.com",
-                TaskStatus.NotStarted, 3, 45, cancellationToken);
+            await EnsureTask("Task1", "TASK-2025-001", new ProjectTask {
+                Id = Guid.NewGuid(), Title = "Install Load-Bearing Column Grid - Level 1-5", Code = "TASK-2025-001",
+                Description = "Installation of the primary load-bearing column grid from ground level to Level 5.",
+                ProjectId = projects["EkoAtlantic"].Id, DepartmentId = departments["StructuralEng"].Id,
+                AssignedToUserId = users["dan.foster@mailinator.com"].Id, AssignedByUserId = users["tony.adeyemi@mailinator.com"].Id,
+                MilestoneId = milestones["EkoStructuralFrame"].Id,
+                Status = TaskStatus.InProgress, Priority = 4, Progress = 65, EstimatedHours = 480,
+                StartDate = D(2025, 6, 1), DueDate = D(2025, 11, 30), CreatedAt = DateTime.UtcNow,
+            });
+            await EnsureTask("Task2", "TASK-2025-002", new ProjectTask {
+                Id = Guid.NewGuid(), Title = "Main Electrical Panel & Distribution Board", Code = "TASK-2025-002",
+                Description = "Supply and installation of the main electrical panel and distribution boards for all floors.",
+                ProjectId = projects["EkoAtlantic"].Id, DepartmentId = departments["ElectricalSys"].Id,
+                ContractorId = contractors["FastWire"].Id,
+                AssignedToUserId = users["chloe.west@mailinator.com"].Id, AssignedByUserId = users["ken.park@mailinator.com"].Id,
+                MilestoneId = milestones["EkoMEP"].Id,
+                Status = TaskStatus.UnderReview, Priority = 3, Progress = 80, EstimatedHours = 240, CreatedAt = DateTime.UtcNow,
+            });
+            await EnsureTask("Task3", "TASK-2025-003", new ProjectTask {
+                Id = Guid.NewGuid(), Title = "Install Drainage & Sewer System - Floors 1-10", Code = "TASK-2025-003",
+                Description = "Complete drainage and sewer system installation for floors 1-10 of the tower.",
+                ProjectId = projects["EkoAtlantic"].Id, DepartmentId = departments["PlumbingUtil"].Id,
+                ContractorId = contractors["AquaTech"].Id,
+                AssignedToUserId = users["samuel.king@mailinator.com"].Id, AssignedByUserId = users["david.osei@mailinator.com"].Id,
+                Status = TaskStatus.InProgress, Priority = 3, Progress = 40, CreatedAt = DateTime.UtcNow,
+            });
+            await EnsureTask("Task4", "TASK-2025-004", new ProjectTask {
+                Id = Guid.NewGuid(), Title = "Lobby & Reception Interior Finishing", Code = "TASK-2025-004",
+                Description = "Complete interior finishing works for the ground floor lobby and reception areas.",
+                ProjectId = projects["EkoAtlantic"].Id, DepartmentId = departments["InteriorFin"].Id,
+                AssignedToUserId = users["amaka.nwosu@mailinator.com"].Id, AssignedByUserId = users["tony.adeyemi@mailinator.com"].Id,
+                Status = TaskStatus.NotStarted, Priority = 2, Progress = 0, EstimatedHours = 320, CreatedAt = DateTime.UtcNow,
+            });
+            await EnsureTask("Task5", "TASK-2025-005", new ProjectTask {
+                Id = Guid.NewGuid(), Title = "Site Clearing & Topographic Survey", Code = "TASK-2025-005",
+                Description = "Complete site clearing and full topographic survey of the ring road corridor.",
+                ProjectId = projects["AbujaRingRoad"].Id, DepartmentId = departments["FoundationEarth"].Id,
+                AssignedToUserId = users["dan.foster@mailinator.com"].Id, AssignedByUserId = users["james.okafor@mailinator.com"].Id,
+                Status = TaskStatus.Completed, Priority = 4, Progress = 100, CompletedAt = D(2025, 7, 15), CreatedAt = DateTime.UtcNow,
+            });
+            await EnsureTask("Task6", "TASK-2025-006", new ProjectTask {
+                Id = Guid.NewGuid(), Title = "Asphalt Laying - Phase 1 (KM 0-15)", Code = "TASK-2025-006",
+                Description = "Asphalt laying operations for Phase 1 covering KM 0 to KM 15 of the ring road.",
+                ProjectId = projects["AbujaRingRoad"].Id, DepartmentId = departments["RoadConstruct"].Id,
+                ContractorId = contractors["RoadMaster"].Id,
+                AssignedToUserId = users["rita.obi@mailinator.com"].Id, AssignedByUserId = users["fatima.bello@mailinator.com"].Id,
+                Status = TaskStatus.InProgress, Priority = 4, Progress = 30, EstimatedHours = 2400, CreatedAt = DateTime.UtcNow,
+            });
+            await EnsureTask("Task7", "TASK-2025-007", new ProjectTask {
+                Id = Guid.NewGuid(), Title = "MRI Room Shielding & Medical Gas Installation", Code = "TASK-2025-007",
+                Description = "Installation of lead shielding for MRI room and complete medical gas piping system.",
+                ProjectId = projects["HospitalReno"].Id, DepartmentId = departments["MedicalSystems"].Id,
+                AssignedToUserId = users["samuel.king@mailinator.com"].Id, AssignedByUserId = users["michael.chen@mailinator.com"].Id,
+                Status = TaskStatus.InProgress, Priority = 4, Progress = 55, CreatedAt = DateTime.UtcNow,
+            });
+            await EnsureTask("Task8", "TASK-2025-008", new ProjectTask {
+                Id = Guid.NewGuid(), Title = "Ward Block Civil Renovation - Wings A & B", Code = "TASK-2025-008",
+                Description = "Civil renovation works for Ward Block Wings A and B including structural repairs.",
+                ProjectId = projects["HospitalReno"].Id, DepartmentId = departments["CivilWorks"].Id,
+                AssignedToUserId = users["chloe.west@mailinator.com"].Id, AssignedByUserId = users["michael.chen@mailinator.com"].Id,
+                Status = TaskStatus.NotStarted, Priority = 3, Progress = 0, CreatedAt = DateTime.UtcNow,
+            });
 
-            // Commercial Office Building - HVAC Department
-            await AddTask("DEPT-HVAC-001", "Install HVAC Units", "TASK-2025-006", "usertest011@mailinator.com", "usertest011@mailinator.com",
-                TaskStatus.UnderReview, 4, 70, cancellationToken);
-
-            // Shopping Mall Renovation - Structural
-            await AddTask("DEPT-STR-001", "Reinforce Main Columns", "TASK-2025-007", "usertest006@mailinator.com", "usertest005@mailinator.com",
-                TaskStatus.Completed, 4, 100, cancellationToken);
-            await AddTask("DEPT-STR-001", "Install Steel Beams", "TASK-2025-008", "usertest006@mailinator.com", "usertest005@mailinator.com",
-                TaskStatus.InProgress, 4, 80, cancellationToken);
-
-            // Shopping Mall Renovation - Finishing
-            await AddTask("DEPT-FIN-001", "Drywall Installation", "TASK-2025-009", "usertest009@mailinator.com", "usertest008@mailinator.com",
-                TaskStatus.NotStarted, 2, 60, cancellationToken);
-
-            // Residential Complex - Foundation
-            await AddTask("DEPT-FND-001", "Pour Foundation Concrete", "TASK-2025-010", "usertest009@mailinator.com", "usertest008@mailinator.com",
-                TaskStatus.Completed, 4, 120, cancellationToken);
-
-            // Residential Complex - Framing
-            await AddTask("DEPT-FRM-001", "Frame Buildings 1-3", "TASK-2025-011", "usertest009@mailinator.com", "usertest009@mailinator.com",
-                TaskStatus.InProgress, 3, 150, cancellationToken);
-
-            // Highway Bridge - Concrete
-            await AddTask("DEPT-CON-001", "Pour Bridge Deck", "TASK-2025-012", "usertest011@mailinator.com", "usertest011@mailinator.com",
-                TaskStatus.UnderReview, 4, 200, cancellationToken);
-
-            // Highway Bridge - Steel
-            await AddTask("DEPT-STL-001", "Install Bridge Supports", "TASK-2025-013", "usertest011@mailinator.com", "usertest011@mailinator.com",
-                TaskStatus.InProgress, 4, 180, cancellationToken);
-
-            // Additional tasks for more variety
-            // Commercial Office Building - Electrical Department (more tasks)
-            await AddTask("DEPT-ELE-001", "Install Emergency Generators", "TASK-2025-014", "usertest006@mailinator.com", "usertest005@mailinator.com",
-                TaskStatus.NotStarted, 4, 50, cancellationToken);
-            await AddTask("DEPT-ELE-001", "Install Security Systems", "TASK-2025-015", "usertest006@mailinator.com", "usertest005@mailinator.com",
-                TaskStatus.Pending, 3, 40, cancellationToken);
-
-            // Shopping Mall Renovation - HVAC
-            await AddTask("DEPT-HVAC-001", "Install Air Conditioning Units", "TASK-2025-016", "usertest011@mailinator.com", "usertest011@mailinator.com",
-                TaskStatus.InProgress, 3, 80, cancellationToken);
-            await AddTask("DEPT-HVAC-001", "Install Ventilation System", "TASK-2025-017", "usertest011@mailinator.com", "usertest011@mailinator.com",
-                TaskStatus.NotStarted, 3, 60, cancellationToken);
-
-            // Residential Complex - Electrical
-            await AddTask("DEPT-ELE-001", "Install Smart Home Systems", "TASK-2025-018", "usertest006@mailinator.com", "usertest005@mailinator.com",
-                TaskStatus.Pending, 2, 35, cancellationToken);
-
-            // Shopping Mall - Finishing (more tasks)
-            await AddTask("DEPT-FIN-001", "Paint Interior Walls", "TASK-2025-019", "usertest009@mailinator.com", "usertest008@mailinator.com",
-                TaskStatus.NotStarted, 2, 50, cancellationToken);
-            await AddTask("DEPT-FIN-001", "Install Flooring", "TASK-2025-020", "usertest009@mailinator.com", "usertest008@mailinator.com",
-                TaskStatus.Pending, 3, 70, cancellationToken);
-
-            await _unitOfWork.SaveChangesAsync(cancellationToken);
-            _logger.LogInformation($"Seeded {_tasks.Count} parent tasks");
+            await _unitOfWork.SaveChangesAsync(ct);
+            _logger.LogInformation("Seeded {Count} tasks.", result.Count);
+            return result;
         }
 
-        private async Task AddTask(string deptCode, string title, string code, string assignedToEmail, string assignedByEmail,
-            TaskStatus status, int priority, int estimatedHours, CancellationToken cancellationToken)
+        // ============================================================
+        //  SUBTASKS (for Task 1)
+        // ============================================================
+        private async Task SeedSubtasksAsync(Dictionary<string, ProjectTask> tasks, Dictionary<string, User> users, CancellationToken ct)
         {
-            var department = _departments.First(d => d.Code == deptCode);
-            var assignedTo = _users.First(u => u.Email == assignedToEmail);
-            var assignedBy = _users.First(u => u.Email == assignedByEmail);
-
-            // Sample construction/building images from Unsplash
-            var sampleImages = new List<string>
+            _logger.LogInformation("Seeding subtasks for Task 1...");
+            var parent = tasks["Task1"];
+            var subtaskDefs = new[]
             {
-                "https://images.unsplash.com/photo-1541888946425-d81bb19240f5?w=800",
-                "https://images.unsplash.com/photo-1503387762-592deb58ef4e?w=800",
-                "https://images.unsplash.com/photo-1504307651254-35680f356dfd?w=800",
-                "https://images.unsplash.com/photo-1589939705384-5185137a7f0f?w=800",
-                "https://images.unsplash.com/photo-1572981779307-38b8cabb2407?w=800",
-                "https://images.unsplash.com/photo-1590496793907-4c5de0f2e254?w=800"
+                new { Code = "TASK-2025-001-A", Title = "Survey & Mark Column Positions",  AssigneeEmail = "dan.foster@mailinator.com",  Status = TaskStatus.Completed,  Progress = 100m },
+                new { Code = "TASK-2025-001-B", Title = "Excavate & Pour Footings",        AssigneeEmail = "dan.foster@mailinator.com",  Status = TaskStatus.Completed,  Progress = 100m },
+                new { Code = "TASK-2025-001-C", Title = "Erect Steel Reinforcement Cages", AssigneeEmail = "chloe.west@mailinator.com",  Status = TaskStatus.InProgress, Progress = 70m  },
+                new { Code = "TASK-2025-001-D", Title = "Pour Concrete & Cure",             AssigneeEmail = "dan.foster@mailinator.com",  Status = TaskStatus.NotStarted, Progress = 0m   },
             };
-
-            var task = new ProjectTask
+            foreach (var s in subtaskDefs)
             {
-                Title = title,
-                Description = $"Complete {title.ToLower()} according to project specifications and safety standards.",
-                Code = code,
-                ProjectId = department.ProjectId,
-                DepartmentId = department.Id,
-                AssignedByUserId = assignedBy.Id,
-                Status = status,
-                Priority = priority,
-                StartDate = DateTime.UtcNow.AddDays(-20),
-                DueDate = DateTime.UtcNow.AddDays(30),
-                CompletedAt = status == TaskStatus.Completed ? DateTime.UtcNow.AddDays(-5) : null,
-                EstimatedHours = estimatedHours,
-                ActualHours = status == TaskStatus.Completed ? estimatedHours + Random.Shared.Next(-5, 10) : null,
-                Progress = status switch
-                {
-                    TaskStatus.NotStarted => 0,
-                    TaskStatus.InProgress => Random.Shared.Next(30, 70),
-                    TaskStatus.UnderReview => Random.Shared.Next(75, 95),
-                    TaskStatus.Completed => 100,
-                    _ => 0
-                },
-                ImageUrls = new List<string> { sampleImages[Random.Shared.Next(sampleImages.Count)] },
-                Tags = new List<string> { "Construction", "2025", department.Name.Split(' ')[0] }
-            };
-
-            _tasks.Add(task);
-            await _unitOfWork.Tasks.AddAsync(task, cancellationToken);
-
-            // Add task-user assignment (primary assignee)
-            var taskUser = new TaskUser
-            {
-                TaskId = task.Id,
-                UserId = assignedTo.Id,
-                AssignedByUserId = assignedBy.Id,
-                AssignedAt = DateTime.UtcNow,
-                IsActive = true,
-                Role = "Primary"
-            };
-            await _unitOfWork.TaskUsers.AddAsync(taskUser, cancellationToken);
+                if (await _unitOfWork.Tasks.AnyAsync(t => t.Code == s.Code, ct)) continue;
+                await _unitOfWork.Tasks.AddAsync(new ProjectTask {
+                    Id = Guid.NewGuid(), Title = s.Title, Code = s.Code,
+                    Description = $"Subtask of: {parent.Title}",
+                    ProjectId = parent.ProjectId, DepartmentId = parent.DepartmentId,
+                    ParentTaskId = parent.Id,
+                    AssignedToUserId = users[s.AssigneeEmail].Id,
+                    AssignedByUserId = users["tony.adeyemi@mailinator.com"].Id,
+                    Status = s.Status, Priority = 4, Progress = s.Progress,
+                    CompletedAt = s.Status == TaskStatus.Completed ? DateTime.UtcNow.AddDays(-10) : (DateTime?)null,
+                    CreatedAt = DateTime.UtcNow,
+                }, ct);
+            }
+            await _unitOfWork.SaveChangesAsync(ct);
+            _logger.LogInformation("Seeded subtasks.");
         }
 
-        private async Task SeedSubtasksAsync(CancellationToken cancellationToken)
+        // ============================================================
+        //  TASK UPDATES
+        // ============================================================
+        private async Task SeedTaskUpdatesAsync(Dictionary<string, ProjectTask> tasks, Dictionary<string, User> users, CancellationToken ct)
         {
-            _logger.LogInformation("Seeding subtasks...");
+            _logger.LogInformation("Seeding task updates...");
+            var chloeId  = users["chloe.west@mailinator.com"].Id;
+            var ritaId   = users["rita.obi@mailinator.com"].Id;
+            var samuelId = users["samuel.king@mailinator.com"].Id;
+            var kenId    = users["ken.park@mailinator.com"].Id;
 
-            // Wire Floor 1-3 (TASK-2025-002)
-            await AddSubtask("TASK-2025-002", "Wire Floor 1", "TASK-2025-002-1", "usertest006@mailinator.com",
-                TaskStatus.Completed, 3, 25, cancellationToken);
-            await AddSubtask("TASK-2025-002", "Wire Floor 2", "TASK-2025-002-2", "usertest006@mailinator.com",
-                TaskStatus.InProgress, 3, 25, cancellationToken);
-            await AddSubtask("TASK-2025-002", "Wire Floor 3", "TASK-2025-002-3", "usertest006@mailinator.com",
-                TaskStatus.NotStarted, 3, 30, cancellationToken);
+            // Update 1: Task 2 - Electrical Panel (ContractorAdmin approved, now UnderSupervisorReview)
+            if (!await _unitOfWork.TaskUpdates.AnyAsync(u => u.TaskId == tasks["Task2"].Id && u.SubmittedByUserId == chloeId, ct))
+            {
+                await _unitOfWork.TaskUpdates.AddAsync(new TaskUpdate {
+                    Id = Guid.NewGuid(), TaskId = tasks["Task2"].Id, SubmittedByUserId = chloeId,
+                    Description = "Main distribution board fully installed. All circuit breakers tested and labeled. Load balancing verified.",
+                    Status = UpdateStatus.UnderSupervisorReview,
+                    MediaUrls = new List<string> {
+                        "https://res.cloudinary.com/demo/image/upload/electrical_panel_1.jpg",
+                        "https://res.cloudinary.com/demo/image/upload/electrical_panel_2.jpg",
+                    },
+                    MediaTypes = new List<string> { "image", "image" },
+                    ProgressPercentage = 80, SubmittedAt = DateTime.UtcNow.AddDays(-2),
+                    ContractorAdminApproved = true, ReviewedByContractorAdminId = kenId,
+                    ContractorAdminReviewedAt = DateTime.UtcNow.AddDays(-1),
+                    ContractorAdminFeedback = "Work quality is excellent. Panel meets all spec requirements.",
+                    CreatedAt = DateTime.UtcNow.AddDays(-2),
+                }, ct);
+            }
 
-            // Install Lighting Fixtures (TASK-2025-003)
-            await AddSubtask("TASK-2025-003", "Install LED Panel Lights", "TASK-2025-003-1", "usertest006@mailinator.com",
-                TaskStatus.NotStarted, 2, 20, cancellationToken);
-            await AddSubtask("TASK-2025-003", "Install Emergency Lighting", "TASK-2025-003-2", "usertest006@mailinator.com",
-                TaskStatus.NotStarted, 3, 20, cancellationToken);
-            await AddSubtask("TASK-2025-003", "Install Outdoor Lighting", "TASK-2025-003-3", "usertest006@mailinator.com",
-                TaskStatus.NotStarted, 2, 20, cancellationToken);
+            // Update 2: Task 6 - Asphalt Laying (UnderContractorAdminReview)
+            if (!await _unitOfWork.TaskUpdates.AnyAsync(u => u.TaskId == tasks["Task6"].Id && u.SubmittedByUserId == ritaId, ct))
+            {
+                await _unitOfWork.TaskUpdates.AddAsync(new TaskUpdate {
+                    Id = Guid.NewGuid(), TaskId = tasks["Task6"].Id, SubmittedByUserId = ritaId,
+                    Description = "Asphalt laid from KM 0-4.5. Compaction tests passed. Weather delay caused 2-day stoppage.",
+                    Status = UpdateStatus.UnderContractorAdminReview,
+                    MediaUrls = new List<string> { "https://res.cloudinary.com/demo/image/upload/road_asphalt_1.jpg" },
+                    MediaTypes = new List<string> { "image" },
+                    ProgressPercentage = 30, SubmittedAt = DateTime.UtcNow.AddDays(-1),
+                    CreatedAt = DateTime.UtcNow.AddDays(-1),
+                }, ct);
+            }
 
-            // Install Water Supply Lines (TASK-2025-004)
-            await AddSubtask("TASK-2025-004", "Connect Main Water Line", "TASK-2025-004-1", "usertest009@mailinator.com",
-                TaskStatus.Completed, 4, 20, cancellationToken);
-            await AddSubtask("TASK-2025-004", "Install Floor Supply Lines", "TASK-2025-004-2", "usertest009@mailinator.com",
-                TaskStatus.InProgress, 3, 30, cancellationToken);
+            // Update 3: Task 7 - MRI Room (AdminApproved, full chain completed)
+            if (!await _unitOfWork.TaskUpdates.AnyAsync(u => u.TaskId == tasks["Task7"].Id && u.SubmittedByUserId == samuelId, ct))
+            {
+                await _unitOfWork.TaskUpdates.AddAsync(new TaskUpdate {
+                    Id = Guid.NewGuid(), TaskId = tasks["Task7"].Id, SubmittedByUserId = samuelId,
+                    Description = "MRI room lead shielding 100% complete. Medical gas lines pressure tested. Oxygen, Nitrous, Suction all verified.",
+                    Status = UpdateStatus.AdminApproved,
+                    MediaUrls = new List<string> {
+                        "https://res.cloudinary.com/demo/image/upload/mri_shielding_1.jpg",
+                        "https://res.cloudinary.com/demo/image/upload/medical_gas_1.mp4",
+                    },
+                    MediaTypes = new List<string> { "image", "video" },
+                    ProgressPercentage = 55, SubmittedAt = DateTime.UtcNow.AddDays(-5),
+                    SupervisorApproved = true, ReviewedBySupervisorId = users["chloe.west@mailinator.com"].Id,
+                    SupervisorReviewedAt = DateTime.UtcNow.AddDays(-4),
+                    SupervisorFeedback = "All shielding measurements verified. Approved for admin review.",
+                    AdminApproved = true, ReviewedByAdminId = users["michael.chen@mailinator.com"].Id,
+                    AdminReviewedAt = DateTime.UtcNow.AddDays(-3),
+                    AdminFeedback = "Excellent work. Fully approved.",
+                    CreatedAt = DateTime.UtcNow.AddDays(-5),
+                }, ct);
+            }
 
-            // Install Drainage System (TASK-2025-005)
-            await AddSubtask("TASK-2025-005", "Install Main Drainage Pipes", "TASK-2025-005-1", "usertest009@mailinator.com",
-                TaskStatus.NotStarted, 3, 25, cancellationToken);
-            await AddSubtask("TASK-2025-005", "Install Floor Drains", "TASK-2025-005-2", "usertest009@mailinator.com",
-                TaskStatus.NotStarted, 3, 20, cancellationToken);
+            // Update 4: Task 1 - Column Grid (non-contracted: FieldWorker submitted, awaiting Supervisor)
+            var danId = users["dan.foster@mailinator.com"].Id;
+            if (!await _unitOfWork.TaskUpdates.AnyAsync(u => u.TaskId == tasks["Task1"].Id && u.SubmittedByUserId == danId, ct))
+            {
+                await _unitOfWork.TaskUpdates.AddAsync(new TaskUpdate {
+                    Id = Guid.NewGuid(), TaskId = tasks["Task1"].Id, SubmittedByUserId = danId,
+                    Description = "Column grid Levels 1-3 complete. Steel reinforcement cages erected and concrete poured. Level 4 cages currently being assembled. On track for deadline.",
+                    Status = UpdateStatus.UnderSupervisorReview,
+                    MediaUrls = new List<string> {
+                        "https://res.cloudinary.com/demo/image/upload/column_grid_l1.jpg",
+                        "https://res.cloudinary.com/demo/image/upload/column_grid_l3.jpg",
+                    },
+                    MediaTypes = new List<string> { "image", "image" },
+                    ProgressPercentage = 65, SubmittedAt = DateTime.UtcNow.AddDays(-3),
+                    CreatedAt = DateTime.UtcNow.AddDays(-3),
+                }, ct);
+            }
 
-            // Install HVAC Units (TASK-2025-006)
-            await AddSubtask("TASK-2025-006", "Install Rooftop Units", "TASK-2025-006-1", "usertest011@mailinator.com",
-                TaskStatus.InProgress, 4, 35, cancellationToken);
-            await AddSubtask("TASK-2025-006", "Install Ductwork", "TASK-2025-006-2", "usertest011@mailinator.com",
-                TaskStatus.InProgress, 3, 35, cancellationToken);
+            // Update 5: Task 3 - Drainage/Sewer (contracted via AquaTech, awaiting ContractorAdmin review)
+            if (!await _unitOfWork.TaskUpdates.AnyAsync(u => u.TaskId == tasks["Task3"].Id && u.SubmittedByUserId == samuelId, ct))
+            {
+                await _unitOfWork.TaskUpdates.AddAsync(new TaskUpdate {
+                    Id = Guid.NewGuid(), TaskId = tasks["Task3"].Id, SubmittedByUserId = samuelId,
+                    Description = "Drainage lines installed on floors 1-4. Main sewer stack connected and pressure-tested at 6 bar. Floors 5-10 pending material delivery estimated next week.",
+                    Status = UpdateStatus.UnderContractorAdminReview,
+                    MediaUrls = new List<string> { "https://res.cloudinary.com/demo/image/upload/drainage_floors_1_4.jpg" },
+                    MediaTypes = new List<string> { "image" },
+                    ProgressPercentage = 40, SubmittedAt = DateTime.UtcNow.AddDays(-1),
+                    CreatedAt = DateTime.UtcNow.AddDays(-1),
+                }, ct);
+            }
 
-            // Install Steel Beams (TASK-2025-008)
-            await AddSubtask("TASK-2025-008", "Inspect Beam Specifications", "TASK-2025-008-1", "usertest006@mailinator.com",
-                TaskStatus.Completed, 2, 10, cancellationToken);
-            await AddSubtask("TASK-2025-008", "Install North Wing Beams", "TASK-2025-008-2", "usertest006@mailinator.com",
-                TaskStatus.InProgress, 4, 40, cancellationToken);
-            await AddSubtask("TASK-2025-008", "Install South Wing Beams", "TASK-2025-008-3", "usertest006@mailinator.com",
-                TaskStatus.NotStarted, 4, 30, cancellationToken);
+            // Update 6: Task 5 - Site Clearing (non-contracted, fully completed chain)
+            var davidId = users["david.osei@mailinator.com"].Id;
+            if (!await _unitOfWork.TaskUpdates.AnyAsync(u => u.TaskId == tasks["Task5"].Id && u.SubmittedByUserId == danId, ct))
+            {
+                await _unitOfWork.TaskUpdates.AddAsync(new TaskUpdate {
+                    Id = Guid.NewGuid(), TaskId = tasks["Task5"].Id, SubmittedByUserId = danId,
+                    Description = "Full site clearing and topographic survey completed. 8.4 km corridor surveyed. All vegetation removed, stakes placed at 50 m intervals. Survey data submitted to design team.",
+                    Status = UpdateStatus.AdminApproved,
+                    MediaUrls = new List<string> {
+                        "https://res.cloudinary.com/demo/image/upload/site_clearing_done.jpg",
+                        "https://res.cloudinary.com/demo/image/upload/survey_stakes.jpg",
+                    },
+                    MediaTypes = new List<string> { "image", "image" },
+                    ProgressPercentage = 100, SubmittedAt = DateTime.UtcNow.AddDays(-20),
+                    SupervisorApproved = true, ReviewedBySupervisorId = users["ken.park@mailinator.com"].Id,
+                    SupervisorReviewedAt = DateTime.UtcNow.AddDays(-18),
+                    SupervisorFeedback = "Survey data verified against reference benchmarks. Clearing done to spec. Approved.",
+                    AdminApproved = true, ReviewedByAdminId = users["james.okafor@mailinator.com"].Id,
+                    AdminReviewedAt = DateTime.UtcNow.AddDays(-17),
+                    AdminFeedback = "Excellent work. Survey deliverable accepted. Task marked complete.",
+                    CreatedAt = DateTime.UtcNow.AddDays(-20),
+                }, ct);
+            }
 
-            // Drywall Installation (TASK-2025-009)
-            await AddSubtask("TASK-2025-009", "Install Drywall - First Floor", "TASK-2025-009-1", "usertest009@mailinator.com",
-                TaskStatus.NotStarted, 2, 30, cancellationToken);
-            await AddSubtask("TASK-2025-009", "Install Drywall - Second Floor", "TASK-2025-009-2", "usertest009@mailinator.com",
-                TaskStatus.NotStarted, 2, 30, cancellationToken);
-
-            // Frame Buildings 1-3 (TASK-2025-011)
-            await AddSubtask("TASK-2025-011", "Frame Building 1", "TASK-2025-011-1", "usertest009@mailinator.com",
-                TaskStatus.Completed, 3, 50, cancellationToken);
-            await AddSubtask("TASK-2025-011", "Frame Building 2", "TASK-2025-011-2", "usertest009@mailinator.com",
-                TaskStatus.InProgress, 3, 50, cancellationToken);
-            await AddSubtask("TASK-2025-011", "Frame Building 3", "TASK-2025-011-3", "usertest009@mailinator.com",
-                TaskStatus.NotStarted, 3, 50, cancellationToken);
-
-            // Install Bridge Supports (TASK-2025-013)
-            await AddSubtask("TASK-2025-013", "Install North Support Columns", "TASK-2025-013-1", "usertest011@mailinator.com",
-                TaskStatus.InProgress, 4, 90, cancellationToken);
-            await AddSubtask("TASK-2025-013", "Install South Support Columns", "TASK-2025-013-2", "usertest011@mailinator.com",
-                TaskStatus.NotStarted, 4, 90, cancellationToken);
-
-            await _unitOfWork.SaveChangesAsync(cancellationToken);
-            _logger.LogInformation("Seeded subtasks");
-
-            // Add additional assignees to some tasks to demonstrate multiple assignees
-            await AddAdditionalAssignees(cancellationToken);
+            await _unitOfWork.SaveChangesAsync(ct);
+            _logger.LogInformation("Seeded task updates.");
         }
 
-        private async Task AddAdditionalAssignees(CancellationToken cancellationToken)
+        // ============================================================
+        //  TASK COMMENTS
+        // ============================================================
+        private async Task SeedTaskCommentsAsync(Dictionary<string, ProjectTask> tasks, Dictionary<string, User> users, CancellationToken ct)
         {
-            _logger.LogInformation("Adding additional assignees to tasks...");
-
-            // TASK-2025-002: Wire Floor 1-3 - Add a support electrician
-            await AddTaskAssignee("TASK-2025-002", "usertest007@mailinator.com", "usertest005@mailinator.com", "Support", cancellationToken);
-
-            // TASK-2025-004: Install Water Supply Lines - Add a helper
-            await AddTaskAssignee("TASK-2025-004", "usertest010@mailinator.com", "usertest008@mailinator.com", "Assistant", cancellationToken);
-
-            // TASK-2025-006: Install HVAC Units - Add technician and supervisor
-            await AddTaskAssignee("TASK-2025-006", "usertest012@mailinator.com", "usertest011@mailinator.com", "Technician", cancellationToken);
-            await AddTaskAssignee("TASK-2025-006", "usertest010@mailinator.com", "usertest011@mailinator.com", "Supervisor", cancellationToken);
-
-            // TASK-2025-008: Install Steel Beams - Add safety officer
-            await AddTaskAssignee("TASK-2025-008", "usertest007@mailinator.com", "usertest005@mailinator.com", "Safety Officer", cancellationToken);
-
-            // TASK-2025-011: Frame Buildings 1-3 - Add multiple workers
-            await AddTaskAssignee("TASK-2025-011", "usertest010@mailinator.com", "usertest009@mailinator.com", "Lead Carpenter", cancellationToken);
-            await AddTaskAssignee("TASK-2025-011", "usertest011@mailinator.com", "usertest009@mailinator.com", "Carpenter", cancellationToken);
-
-            // TASK-2025-013: Install Bridge Supports - Add QA inspector
-            await AddTaskAssignee("TASK-2025-013", "usertest012@mailinator.com", "usertest011@mailinator.com", "QA Inspector", cancellationToken);
-
-            await _unitOfWork.SaveChangesAsync(cancellationToken);
-            _logger.LogInformation("Added additional assignees to tasks");
+            _logger.LogInformation("Seeding task comments...");
+            var commentDefs = new[]
+            {
+                new { TaskKey = "Task1", Email = "tony.adeyemi@mailinator.com",  Text = "Great progress on the column grid. Please ensure all joints are inspected before the concrete pour."    },
+                new { TaskKey = "Task2", Email = "ken.park@mailinator.com",       Text = "All wiring follows BS 7671 standard. Certificates will be uploaded by end of week."                    },
+                new { TaskKey = "Task7", Email = "michael.chen@mailinator.com",   Text = "Excellent work Samuel. Please coordinate with the hospital engineering team for final sign-off."        },
+            };
+            foreach (var c in commentDefs)
+            {
+                var taskId = tasks[c.TaskKey].Id; var userId = users[c.Email].Id;
+                if (await _unitOfWork.TaskComments.AnyAsync(tc => tc.TaskId == taskId && tc.UserId == userId && tc.Comment == c.Text, ct)) continue;
+                await _unitOfWork.TaskComments.AddAsync(new TaskComment {
+                    Id = Guid.NewGuid(), TaskId = taskId, UserId = userId, Comment = c.Text, CreatedAt = DateTime.UtcNow,
+                }, ct);
+            }
+            await _unitOfWork.SaveChangesAsync(ct);
+            _logger.LogInformation("Seeded task comments.");
         }
 
-        private async Task AddTaskAssignee(string taskCode, string assigneeEmail, string assignedByEmail, string role, CancellationToken cancellationToken)
+        // ============================================================
+        //  WORK INFOS
+        // ============================================================
+        private async Task SeedWorkInfosAsync(
+            Dictionary<string, Project>      projects,
+            Dictionary<string, Department>   departments,
+            Dictionary<string, Contractor>   contractors,
+            Dictionary<string, User>         users,
+            Dictionary<string, Organization> orgs,
+            CancellationToken ct)
         {
-            var task = _tasks.First(t => t.Code == taskCode);
-            var assignee = _users.First(u => u.Email == assigneeEmail);
-            var assignedBy = _users.First(u => u.Email == assignedByEmail);
+            _logger.LogInformation("Seeding work infos...");
 
-            var taskUser = new TaskUser
+            var defs = new (string Email, string ProjKey, string OrgKey, string? DeptKey, string? ContrKey, string Position, DateTime Start, DateTime? End, ContractType ContractType)[]
             {
-                TaskId = task.Id,
-                UserId = assignee.Id,
-                AssignedByUserId = assignedBy.Id,
-                AssignedAt = DateTime.UtcNow,
-                IsActive = true,
-                Role = role
+                // ── Eko Atlantic Tower ─────────────────────────────────────────────────
+                ("james.okafor@mailinator.com",  "EkoAtlantic",        "OkaforBuilds",    null,              null,         "Managing Director",              D(2025, 1, 15), D(2027, 6, 30),  ContractType.FullTime),
+                ("tony.adeyemi@mailinator.com",  "EkoAtlantic",        "OkaforBuilds",    "StructuralEng",   null,         "Project Administrator",          D(2025, 1, 15), D(2027, 6, 30),  ContractType.FullTime),
+                ("rita.obi@mailinator.com",       "EkoAtlantic",        "OkaforBuilds",    "ElectricalSys",   null,         "Electrical Supervisor",          D(2025, 1, 15), D(2027, 6, 30),  ContractType.FullTime),
+                ("samuel.king@mailinator.com",   "EkoAtlantic",        "OkaforBuilds",    "PlumbingUtil",    null,         "Plumbing Supervisor",            D(2025, 1, 15), D(2027, 6, 30),  ContractType.FullTime),
+                ("amaka.nwosu@mailinator.com",   "EkoAtlantic",        "OkaforBuilds",    "InteriorFin",     null,         "Interior Finishing Supervisor",  D(2025, 1, 15), D(2027, 6, 30),  ContractType.FullTime),
+                ("dan.foster@mailinator.com",    "EkoAtlantic",        "OkaforBuilds",    "StructuralEng",   null,         "Structural Technician",          D(2025, 1, 15), D(2027, 6, 30),  ContractType.Contract),
+                ("ken.park@mailinator.com",       "EkoAtlantic",        "OkaforBuilds",    "ElectricalSys",   "FastWire",   "Lead Electrical Contractor",    D(2025, 3, 1),  D(2026, 9, 30),  ContractType.Contract),
+                ("david.osei@mailinator.com",    "EkoAtlantic",        "OkaforBuilds",    "PlumbingUtil",    "AquaTech",   "Plumbing Contractor Lead",       D(2025, 4, 1),  D(2026, 6, 30),  ContractType.Contract),
+                ("chloe.west@mailinator.com",    "EkoAtlantic",        "OkaforBuilds",    "StructuralEng",   null,         "Structural Field Worker",        D(2025, 1, 15), D(2027, 6, 30),  ContractType.Contract),
+                // ── Abuja Ring Road Extension ──────────────────────────────────────────
+                ("grace.eze@mailinator.com",      "AbujaRingRoad",      "OkaforBuilds",    null,              null,         "Project Owner",                  D(2025, 3, 1),  null,            ContractType.FullTime),
+                ("james.okafor@mailinator.com",  "AbujaRingRoad",      "OkaforBuilds",    null,              null,         "Project Administrator",          D(2025, 3, 1),  null,            ContractType.FullTime),
+                ("dan.foster@mailinator.com",    "AbujaRingRoad",      "OkaforBuilds",    "FoundationEarth", null,         "Site Supervisor",                D(2025, 3, 1),  null,            ContractType.Contract),
+                ("ken.park@mailinator.com",       "AbujaRingRoad",      "OkaforBuilds",    "RoadConstruct",   null,         "Road Construction Supervisor",  D(2025, 3, 1),  null,            ContractType.Contract),
+                ("fatima.bello@mailinator.com",  "AbujaRingRoad",      "OkaforBuilds",    "RoadConstruct",   "RoadMaster", "Contractor Admin - RoadMaster",  D(2025, 6, 1),  D(2028, 11, 30), ContractType.Subcontractor),
+                ("rita.obi@mailinator.com",       "AbujaRingRoad",      "OkaforBuilds",    "RoadConstruct",   "RoadMaster", "Asphalt Field Worker",           D(2025, 6, 1),  D(2028, 11, 30), ContractType.Subcontractor),
+                ("michael.chen@mailinator.com",  "AbujaRingRoad",      "OkaforBuilds",    null,              null,         "Project Observer",               D(2025, 3, 1),  null,            ContractType.FullTime),
+                // ── Lagos State Hospital Renovation ────────────────────────────────────
+                ("linda.stone@mailinator.com",   "HospitalReno",       "StonePartners",   null,              null,         "Project Owner",                  D(2025, 2, 1),  D(2026, 8, 31),  ContractType.FullTime),
+                ("michael.chen@mailinator.com",  "HospitalReno",       "StonePartners",   "CivilWorks",      null,         "Project Administrator",          D(2025, 2, 1),  D(2026, 8, 31),  ContractType.FullTime),
+                ("chloe.west@mailinator.com",    "HospitalReno",       "StonePartners",   "MedicalSystems",  null,         "Medical Systems Supervisor",     D(2025, 2, 1),  D(2026, 8, 31),  ContractType.FullTime),
+                ("samuel.king@mailinator.com",   "HospitalReno",       "StonePartners",   "MedicalSystems",  null,         "Medical Systems Technician",     D(2025, 2, 1),  D(2026, 8, 31),  ContractType.Contract),
+                // ── Presidential Garden Park ───────────────────────────────────────────
+                ("superadmin@apexbuild.io",      "PresidentialGarden", "SuperAdminDirect", null,             null,         "Platform Owner",                 D(2025, 6, 1),  null,            ContractType.FullTime),
+                ("linda.stone@mailinator.com",   "PresidentialGarden", "SuperAdminDirect", null,             null,         "Project Administrator",          D(2025, 6, 1),  null,            ContractType.FullTime),
             };
 
-            await _unitOfWork.TaskUsers.AddAsync(taskUser, cancellationToken);
+            foreach (var w in defs)
+            {
+                var user = users[w.Email]; var project = projects[w.ProjKey];
+                if (await _unitOfWork.WorkInfos.AnyAsync(wi => wi.UserId == user.Id && wi.ProjectId == project.Id && wi.Position == w.Position, ct)) continue;
+                await _unitOfWork.WorkInfos.AddAsync(new WorkInfo {
+                    Id = Guid.NewGuid(), UserId = user.Id, ProjectId = project.Id,
+                    OrganizationId = orgs[w.OrgKey].Id,
+                    DepartmentId = w.DeptKey != null ? (Guid?)departments[w.DeptKey].Id : null,
+                    ContractorId = w.ContrKey != null ? (Guid?)contractors[w.ContrKey].Id : null,
+                    Position = w.Position, StartDate = w.Start, EndDate = w.End,
+                    ContractType = w.ContractType, Status = ProjectUserStatus.Active, IsActive = true, CreatedAt = DateTime.UtcNow,
+                }, ct);
+            }
+
+            await _unitOfWork.SaveChangesAsync(ct);
+            _logger.LogInformation("Seeded work infos.");
         }
 
-        private async Task AddSubtask(string parentTaskCode, string title, string code, string assignedToEmail,
-            TaskStatus status, int priority, int estimatedHours, CancellationToken cancellationToken)
-        {
-            var parentTask = _tasks.First(t => t.Code == parentTaskCode);
-            var assignedTo = _users.First(u => u.Email == assignedToEmail);
-
-            // Sample construction/work progress images
-            var sampleImages = new List<string>
-            {
-                "https://images.unsplash.com/photo-1504307651254-35680f356dfd?w=600",
-                "https://images.unsplash.com/photo-1581094271901-8022df4466f9?w=600",
-                "https://images.unsplash.com/photo-1572981779307-38b8cabb2407?w=600",
-                "https://images.unsplash.com/photo-1590496793907-4c5de0f2e254?w=600"
-            };
-
-            var subtask = new ProjectTask
-            {
-                Title = title,
-                Description = $"Subtask: {title}",
-                Code = code,
-                ProjectId = parentTask.ProjectId,
-                DepartmentId = parentTask.DepartmentId,
-                ParentTaskId = parentTask.Id,
-                AssignedByUserId = parentTask.AssignedByUserId,
-                Status = status,
-                Priority = priority,
-                StartDate = DateTime.UtcNow.AddDays(-15),
-                DueDate = DateTime.UtcNow.AddDays(20),
-                CompletedAt = status == TaskStatus.Completed ? DateTime.UtcNow.AddDays(-3) : null,
-                EstimatedHours = estimatedHours,
-                Progress = status switch
-                {
-                    TaskStatus.NotStarted => 0,
-                    TaskStatus.InProgress => Random.Shared.Next(40, 80),
-                    TaskStatus.Completed => 100,
-                    _ => 0
-                },
-                ImageUrls = new List<string> { sampleImages[Random.Shared.Next(sampleImages.Count)] },
-                Tags = new List<string> { "Subtask", "2025" }
-            };
-
-            await _unitOfWork.Tasks.AddAsync(subtask, cancellationToken);
-
-            // Add task-user assignment for subtask
-            var taskUser = new TaskUser
-            {
-                TaskId = subtask.Id,
-                UserId = assignedTo.Id,
-                AssignedByUserId = parentTask.AssignedByUserId,
-                AssignedAt = DateTime.UtcNow,
-                IsActive = true,
-                Role = "Primary"
-            };
-            await _unitOfWork.TaskUsers.AddAsync(taskUser, cancellationToken);
-        }
-
-        private async Task SeedTaskUpdatesAndCommentsAsync(CancellationToken cancellationToken)
-        {
-            _logger.LogInformation("Seeding task updates and comments...");
-
-            // Add updates for some in-progress tasks
-            await AddTaskUpdateWithComment("TASK-2025-002", "usertest006@mailinator.com", "usertest005@mailinator.com",
-                "Completed wiring for Floor 1 and 2. Starting Floor 3 tomorrow.", 65, true, cancellationToken);
-
-            await AddTaskUpdateWithComment("TASK-2025-004", "usertest009@mailinator.com", "usertest008@mailinator.com",
-                "Main water line connected. Installing floor supply lines in progress.", 60, true, cancellationToken);
-
-            await AddTaskUpdateWithComment("TASK-2025-006", "usertest011@mailinator.com", "usertest011@mailinator.com",
-                "All HVAC units installed and tested. Ready for final inspection.", 95, false, cancellationToken);
-
-            await AddTaskUpdateWithComment("TASK-2025-008", "usertest006@mailinator.com", "usertest005@mailinator.com",
-                "North wing beams installation 80% complete. Awaiting final beam delivery.", 75, true, cancellationToken);
-
-            await _unitOfWork.SaveChangesAsync(cancellationToken);
-            _logger.LogInformation("Seeded task updates and comments");
-        }
-
-        private async Task AddTaskUpdateWithComment(string taskCode, string submittedByEmail, string supervisorEmail,
-            string description, decimal progress, bool supervisorApproved, CancellationToken cancellationToken)
-        {
-            var task = _tasks.First(t => t.Code == taskCode);
-            var submittedBy = _users.First(u => u.Email == submittedByEmail);
-            var supervisor = _users.First(u => u.Email == supervisorEmail);
-
-            // Add task update
-            var update = new TaskUpdate
-            {
-                TaskId = task.Id,
-                SubmittedByUserId = submittedBy.Id,
-                Description = description,
-                Status = supervisorApproved ? UpdateStatus.UnderAdminReview : UpdateStatus.UnderSupervisorReview,
-                ProgressPercentage = progress,
-                Summary = $"Progress update: {progress}% complete",
-                SubmittedAt = DateTime.UtcNow.AddDays(-2),
-                ReviewedBySupervisorId = supervisorApproved ? supervisor.Id : null,
-                SupervisorReviewedAt = supervisorApproved ? DateTime.UtcNow.AddDays(-1) : null,
-                SupervisorFeedback = supervisorApproved ? "Good progress. Approved for admin review." : null,
-                SupervisorApproved = supervisorApproved ? true : null
-            };
-            await _unitOfWork.TaskUpdates.AddAsync(update, cancellationToken);
-
-            // Add task comment
-            var comment = new TaskComment
-            {
-                TaskId = task.Id,
-                UserId = supervisor.Id,
-                Comment = supervisorApproved
-                    ? "Great work! Keep up the good progress."
-                    : "Please review the specifications before proceeding further."
-            };
-            await _unitOfWork.TaskComments.AddAsync(comment, cancellationToken);
-        }
-
-        private async Task SeedInvitationsAsync(CancellationToken cancellationToken)
+        // ============================================================
+        //  INVITATIONS
+        // ============================================================
+        private async Task SeedInvitationsAsync(Dictionary<string, Project> projects, Dictionary<string, User> users, Dictionary<string, Role> roles, CancellationToken ct)
         {
             _logger.LogInformation("Seeding invitations...");
 
-            var project = _projects.First(p => p.Code == "PROJ-2025-001");
-            var inviter = _users.First(u => u.Email == "usertest004@mailinator.com");
-            var role = _roles.First(r => r.RoleType == RoleType.FieldWorker);
-
-            var invitation = new Invitation
+            // Invitation 1: New unregistered member invited to Eko Atlantic Tower
+            const string newMemberEmail = "newmember@mailinator.com";
+            if (!await _unitOfWork.Invitations.AnyAsync(i => i.Email == newMemberEmail && i.ProjectId == projects["EkoAtlantic"].Id, ct))
             {
-                Email = "newuser@mailinator.com",
-                Token = Guid.NewGuid().ToString(),
-                InvitedByUserId = inviter.Id,
-                RoleId = role.Id,
-                ProjectId = project.Id,
-                OrganizationId = project.OrganizationId, // FIX: Add organization context
-                Status = InvitationStatus.Pending,
-                ExpiresAt = DateTime.UtcNow.AddDays(7),
-                Message = "You are invited to join the Commercial Office Building project as a Field Worker."
-            };
+                await _unitOfWork.Invitations.AddAsync(new Invitation {
+                    Id = Guid.NewGuid(), InvitedByUserId = users["james.okafor@mailinator.com"].Id,
+                    Email = newMemberEmail, IsExistingUser = false,
+                    RoleId = roles["FieldWorker"].Id, ProjectId = projects["EkoAtlantic"].Id,
+                    Token = Guid.NewGuid().ToString("N"), Status = InvitationStatus.Pending,
+                    ExpiresAt = DateTime.UtcNow.AddDays(7),
+                    Position = "Junior Structural Technician", ContractType = ContractType.Contract,
+                    WorkStartDate = D(2026, 1, 1), CreatedAt = DateTime.UtcNow,
+                }, ct);
+            }
 
-            await _unitOfWork.Invitations.AddAsync(invitation, cancellationToken);
-            await _unitOfWork.SaveChangesAsync(cancellationToken);
-            _logger.LogInformation("Seeded invitations");
+            // Invitation 2: Existing user dan.foster invited to Hospital Renovation as Observer
+            var danUser = users["dan.foster@mailinator.com"];
+            if (!await _unitOfWork.Invitations.AnyAsync(i => i.InvitedUserId == danUser.Id && i.ProjectId == projects["HospitalReno"].Id, ct))
+            {
+                await _unitOfWork.Invitations.AddAsync(new Invitation {
+                    Id = Guid.NewGuid(), InvitedByUserId = users["linda.stone@mailinator.com"].Id,
+                    InvitedUserId = danUser.Id, Email = "dan.foster@mailinator.com",
+                    IsExistingUser = true, RoleId = roles["Observer"].Id,
+                    ProjectId = projects["HospitalReno"].Id,
+                    Token = Guid.NewGuid().ToString("N"), Status = InvitationStatus.Pending,
+                    ExpiresAt = DateTime.UtcNow.AddDays(7),
+                    Message = "We would love to have your expertise reviewing the civil works.",
+                    CreatedAt = DateTime.UtcNow,
+                }, ct);
+            }
+
+            await _unitOfWork.SaveChangesAsync(ct);
+            _logger.LogInformation("Seeded invitations.");
         }
 
-        private async Task SeedNotificationsAsync(CancellationToken cancellationToken)
+        // ============================================================
+        //  NOTIFICATIONS
+        // ============================================================
+        private async Task SeedNotificationsAsync(Dictionary<string, User> users, CancellationToken ct)
         {
             _logger.LogInformation("Seeding notifications...");
-
-            // Add sample notifications for users
-            await AddNotification("usertest004@mailinator.com", "Task Update Review",
-                "New task update awaiting your review for task TASK-2025-006", NotificationType.TaskUpdate, cancellationToken);
-
-            await AddNotification("usertest005@mailinator.com", "Task Assigned",
-                "You have been assigned a new task: Install Lighting Fixtures", NotificationType.TaskAssigned, cancellationToken);
-
-            await AddNotification("usertest001@mailinator.com", "License Expiring Soon",
-                "Organization license for TechBuild Corp will expire in 30 days", NotificationType.DeadlineReminder, cancellationToken);
-
-            await _unitOfWork.SaveChangesAsync(cancellationToken);
-            _logger.LogInformation("Seeded notifications");
-        }
-
-        private async Task AddNotification(string userEmail, string title, string message, NotificationType type, CancellationToken cancellationToken)
-        {
-            var user = _users.First(u => u.Email == userEmail);
-
-            var notification = new Notification
+            var notifDefs = new[]
             {
-                UserId = user.Id,
-                Title = title,
-                Message = message,
-                Type = type,
-                IsRead = false,
-                Channel = NotificationChannel.InApp
+                new { Email = "tony.adeyemi@mailinator.com",  Type = NotificationType.PendingApproval,      Title = "Task Update Awaiting Your Review",  Message = "The electrical panel installation update needs your review on Eko Atlantic Tower."     },
+                new { Email = "ken.park@mailinator.com",      Type = NotificationType.TaskUpdate,           Title = "Your Update Has Been Approved",      Message = "Your progress update on Task 2 has been approved by the Contractor Admin."           },
+                new { Email = "james.okafor@mailinator.com",  Type = NotificationType.ContractExpiringSoon, Title = "Contractor Contract Expiring Soon",  Message = "FastWire Electricals contract expires in 14 days. Please review and renew."          },
             };
-
-            await _unitOfWork.Notifications.AddAsync(notification, cancellationToken);
+            foreach (var n in notifDefs)
+            {
+                var userId = users[n.Email].Id;
+                if (await _unitOfWork.Notifications.AnyAsync(x => x.UserId == userId && x.Title == n.Title, ct)) continue;
+                await _unitOfWork.Notifications.AddAsync(new Notification {
+                    Id = Guid.NewGuid(), UserId = userId, Type = n.Type, Title = n.Title,
+                    Message = n.Message, Channel = NotificationChannel.InApp,
+                    IsRead = false, CreatedAt = DateTime.UtcNow,
+                }, ct);
+            }
+            await _unitOfWork.SaveChangesAsync(ct);
+            _logger.LogInformation("Seeded notifications.");
         }
 
+        // ============================================================
+        //  CLEAR SEEDED DATA
+        // ============================================================
         public async Task<(bool Success, string Message)> ClearSeededDataAsync(CancellationToken cancellationToken = default)
         {
             try
             {
-                _logger.LogInformation("Clearing seeded data...");
+                _logger.LogInformation("Starting clear of seeded data...");
 
-                // Soft delete all test users and their related data will cascade
-                var testUsers = await _unitOfWork.Users.FindAsync(
-                    u => u.Email.StartsWith("usertest") && u.Email.Contains("@mailinator.com"),
-                    cancellationToken);
+                await _unitOfWork.BeginTransactionAsync(cancellationToken);
 
-                foreach (var user in testUsers)
-                {
-                    user.IsDeleted = true;
-                    user.DeletedAt = DateTime.UtcNow;
-                }
+                // Delete in reverse dependency order
+                var notifications = await _unitOfWork.Notifications.FindAsync(_ => true, cancellationToken);
+                await _unitOfWork.Notifications.DeleteRangeAsync(notifications, cancellationToken);
+
+                var invitations = await _unitOfWork.Invitations.FindAsync(_ => true, cancellationToken);
+                await _unitOfWork.Invitations.DeleteRangeAsync(invitations, cancellationToken);
+
+                var workInfos = await _unitOfWork.WorkInfos.FindAsync(_ => true, cancellationToken);
+                await _unitOfWork.WorkInfos.DeleteRangeAsync(workInfos, cancellationToken);
+
+                var taskComments = await _unitOfWork.TaskComments.FindAsync(_ => true, cancellationToken);
+                await _unitOfWork.TaskComments.DeleteRangeAsync(taskComments, cancellationToken);
+
+                var taskUpdates = await _unitOfWork.TaskUpdates.FindAsync(_ => true, cancellationToken);
+                await _unitOfWork.TaskUpdates.DeleteRangeAsync(taskUpdates, cancellationToken);
+
+                var tasks = await _unitOfWork.Tasks.FindAsync(_ => true, cancellationToken);
+                await _unitOfWork.Tasks.DeleteRangeAsync(tasks, cancellationToken);
+
+                var milestones = await _unitOfWork.Milestones.FindAsync(_ => true, cancellationToken);
+                await _unitOfWork.Milestones.DeleteRangeAsync(milestones, cancellationToken);
+
+                var projectUsers = await _unitOfWork.ProjectUsers.FindAsync(_ => true, cancellationToken);
+                await _unitOfWork.ProjectUsers.DeleteRangeAsync(projectUsers, cancellationToken);
+
+                var userRoles = await _unitOfWork.UserRoles.FindAsync(_ => true, cancellationToken);
+                await _unitOfWork.UserRoles.DeleteRangeAsync(userRoles, cancellationToken);
+
+                var contractors = await _unitOfWork.Contractors.FindAsync(_ => true, cancellationToken);
+                await _unitOfWork.Contractors.DeleteRangeAsync(contractors, cancellationToken);
+
+                var departments = await _unitOfWork.Departments.FindAsync(_ => true, cancellationToken);
+                await _unitOfWork.Departments.DeleteRangeAsync(departments, cancellationToken);
+
+                var projects = await _unitOfWork.Projects.FindAsync(_ => true, cancellationToken);
+                await _unitOfWork.Projects.DeleteRangeAsync(projects, cancellationToken);
+
+                var subscriptions = await _unitOfWork.Subscriptions.FindAsync(_ => true, cancellationToken);
+                await _unitOfWork.Subscriptions.DeleteRangeAsync(subscriptions, cancellationToken);
+
+                var orgMembers = await _unitOfWork.OrganizationMembers.FindAsync(_ => true, cancellationToken);
+                await _unitOfWork.OrganizationMembers.DeleteRangeAsync(orgMembers, cancellationToken);
+
+                var orgs = await _unitOfWork.Organizations.FindAsync(_ => true, cancellationToken);
+                await _unitOfWork.Organizations.DeleteRangeAsync(orgs, cancellationToken);
+
+                var users = await _unitOfWork.Users.FindAsync(_ => true, cancellationToken);
+                await _unitOfWork.Users.DeleteRangeAsync(users, cancellationToken);
+
+                var roles = await _unitOfWork.Roles.FindAsync(_ => true, cancellationToken);
+                await _unitOfWork.Roles.DeleteRangeAsync(roles, cancellationToken);
 
                 await _unitOfWork.SaveChangesAsync(cancellationToken);
+                await _unitOfWork.CommitTransactionAsync(cancellationToken);
 
-                _logger.LogInformation($"Cleared {testUsers.Count()} test users and related data");
-                return (true, $"Successfully cleared {testUsers.Count()} test users and all related seeded data.");
+                _logger.LogInformation("Seeded data cleared successfully.");
+                return (true, "Seeded data cleared successfully.");
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error occurred while clearing seeded data");
-                return (false, $"Error while clearing data: {ex.Message}");
+                await _unitOfWork.RollbackTransactionAsync(cancellationToken);
+                _logger.LogError(ex, "Failed to clear seeded data.");
+                return (false, $"Clear failed: {ex.Message}");
             }
         }
+
     }
 }

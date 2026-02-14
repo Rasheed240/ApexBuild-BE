@@ -24,9 +24,10 @@ namespace ApexBuild.Api.Controllers
         /// </summary>
         [HttpGet("stats")]
         [ProducesResponseType(typeof(ApiResponse<GetDashboardStatsResponse>), StatusCodes.Status200OK)]
-        public async Task<ActionResult<ApiResponse<GetDashboardStatsResponse>>> GetStats()
+        public async Task<ActionResult<ApiResponse<GetDashboardStatsResponse>>> GetStats(
+            [FromQuery] Guid? organizationId = null)
         {
-            var query = new GetDashboardStatsQuery();
+            var query = new GetDashboardStatsQuery { OrganizationId = organizationId };
             var response = await _mediator.Send(query);
             return Ok(ApiResponse.Success(response, "Dashboard stats retrieved successfully"));
         }

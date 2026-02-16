@@ -1,5 +1,6 @@
 using ApexBuild.Application.Common.Interfaces;
 using ApexBuild.Domain.Entities;
+using ApexBuild.Domain.Enums;
 using ApexBuild.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -68,5 +69,35 @@ public class TaskUpdateRepository : BaseRepository<TaskUpdate>, ITaskUpdateRepos
                 u.SubmittedAt < endOfDay,
                 cancellationToken);
     }
-}
 
+    public async Task<(IEnumerable<TaskUpdate> Items, int TotalCount)> GetPendingForReviewAsync(
+        Guid organizationId, int pageNumber, int pageSize, CancellationToken cancellationToken = default)
+    {
+        var pendingStatuses = new[] 
+        { 
+            (int)UpdateStatus.UnderContractorAdminReview,
+            (int)UpdateStatus.UnderSupervisorReview,
+            (int)UpdateStatus.UnderAdminReview
+        };
+        var query = _context.TaskUpdates
+            .Include(u => u.Task)
+                .ThenInclude(t => t.Department)
+                    .ThenInclude(d => d.Project)
+            .Include(u => u.Task)
+                .ThenInclude(t => t.Department)
+            .Include(u => u.Task)
+                .ThenInclude(t => t.Contractor)
+            .Include(u => u.SubmittedByUser)
+            .Where(u => !u.IsDeleted && pendingStatuses.Contains((int)u.Status)
+                        && u.Task.Department.Project.OrganizationId == organizationId);
+
+        var total = await query.CountAsync(cancellationToken);
+        var items = await query
+            .OrderByDescending(u => u.SubmittedAt)
+            .Skip((pageNumber - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync(cancellationToken);
+
+        return (items, total);
+    }
+}

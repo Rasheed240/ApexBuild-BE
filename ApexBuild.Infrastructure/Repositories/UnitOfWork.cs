@@ -1,5 +1,3 @@
-
-
 using ApexBuild.Application.Common.Interfaces;
 using ApexBuild.Infrastructure.Persistence;
 using ApexBuild.Domain.Entities;
@@ -15,48 +13,81 @@ namespace ApexBuild.Infrastructure.Repositories
         public UnitOfWork(ApplicationDbContext context)
         {
             _context = context;
+
+            // Core
             Users = new UserRepository(_context);
             Roles = new RoleRepository(_context);
-            Projects = new ProjectRepository(_context);
+            UserRoles = new BaseRepository<UserRole>(_context);
+
+            // Organization
             Organizations = new OrganizationRepository(_context);
             OrganizationMembers = new OrganizationMemberRepository(_context);
+
+            // Project & Structure
+            Projects = new ProjectRepository(_context);
+            ProjectUsers = new BaseRepository<ProjectUser>(_context);
             Departments = new DepartmentRepository(_context);
+            Contractors = new ContractorRepository(_context);
+            Milestones = new ProjectMilestoneRepository(_context);
+
+            // Tasks
             Tasks = new TaskRepository(_context);
             TaskUpdates = new TaskUpdateRepository(_context);
-            Invitations = new InvitationRepository(_context);
-            Notifications = new NotificationRepository(_context);
-            AuditLogs = new AuditLogRepository(_context);
-            Subscriptions = new SubscriptionRepository(_context);
-            OrganizationLicenses = new OrganizationLicenseRepository(_context);
-            PaymentTransactions = new PaymentTransactionRepository(_context);
-            UserRoles = new BaseRepository<UserRole>(_context);
-            TaskComments = new BaseRepository<TaskComment>(_context);
             TaskUsers = new BaseRepository<TaskUser>(_context);
-            DepartmentSupervisors = new BaseRepository<DepartmentSupervisor>(_context);
+            TaskComments = new BaseRepository<TaskComment>(_context);
+
+            // Work & Invitations
             WorkInfos = new BaseRepository<WorkInfo>(_context);
-            ProjectUsers = new BaseRepository<ProjectUser>(_context);
+            Invitations = new InvitationRepository(_context);
+
+            // Communication
+            Notifications = new NotificationRepository(_context);
+
+            // Billing
+            Subscriptions = new SubscriptionRepository(_context);
+            PaymentTransactions = new PaymentTransactionRepository(_context);
+
+            // Audit & Security
+            AuditLogs = new AuditLogRepository(_context);
+            DepartmentSupervisors = new BaseRepository<DepartmentSupervisor>(_context);
         }
 
+        // Core
         public IUserRepository Users { get; }
         public IRoleRepository Roles { get; }
-        public IProjectRepository Projects { get; }
+        public IRepository<UserRole> UserRoles { get; }
+
+        // Organization
         public IOrganizationRepository Organizations { get; }
         public IOrganizationMemberRepository OrganizationMembers { get; }
+
+        // Project & Structure
+        public IProjectRepository Projects { get; }
+        public IRepository<ProjectUser> ProjectUsers { get; }
         public IDepartmentRepository Departments { get; }
+        public IContractorRepository Contractors { get; }
+        public IProjectMilestoneRepository Milestones { get; }
+
+        // Tasks
         public ITaskRepository Tasks { get; }
         public ITaskUpdateRepository TaskUpdates { get; }
-        public IInvitationRepository Invitations { get; }
-        public INotificationRepository Notifications { get; }
-        public IAuditLogRepository AuditLogs { get; }
-        public ISubscriptionRepository Subscriptions { get; }
-        public IOrganizationLicenseRepository OrganizationLicenses { get; }
-        public IPaymentTransactionRepository PaymentTransactions { get; }
-        public IRepository<UserRole> UserRoles { get; }
-        public IRepository<TaskComment> TaskComments { get; }
         public IRepository<TaskUser> TaskUsers { get; }
-        public IRepository<DepartmentSupervisor> DepartmentSupervisors { get; }
+        public IRepository<TaskComment> TaskComments { get; }
+
+        // Work & Invitations
         public IRepository<WorkInfo> WorkInfos { get; }
-        public IRepository<ProjectUser> ProjectUsers { get; }
+        public IInvitationRepository Invitations { get; }
+
+        // Communication
+        public INotificationRepository Notifications { get; }
+
+        // Billing
+        public ISubscriptionRepository Subscriptions { get; }
+        public IPaymentTransactionRepository PaymentTransactions { get; }
+
+        // Audit & Security
+        public IAuditLogRepository AuditLogs { get; }
+        public IRepository<DepartmentSupervisor> DepartmentSupervisors { get; }
 
         public async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
         {
@@ -120,4 +151,3 @@ namespace ApexBuild.Infrastructure.Repositories
         }
     }
 }
-

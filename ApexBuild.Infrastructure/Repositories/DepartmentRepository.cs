@@ -11,41 +11,33 @@ namespace ApexBuild.Infrastructure.Repositories
 {
     public class DepartmentRepository : BaseRepository<Department>, IDepartmentRepository
     {
-        public DepartmentRepository(ApplicationDbContext context) : base(context)
-        {
-        }
+        public DepartmentRepository(ApplicationDbContext context) : base(context) { }
 
-        public async Task<IEnumerable<Department>> GetDepartmentsByProjectAsync(
-            Guid projectId,
-            CancellationToken cancellationToken = default)
+        public async Task<IEnumerable<Department>> GetDepartmentsByProjectAsync(Guid projectId, CancellationToken cancellationToken = default)
         {
             return await _dbSet
                 .Include(d => d.Supervisor)
-                .Include(d => d.Organization)
+                .Include(d => d.Project)
                 .Where(d => d.ProjectId == projectId && !d.IsDeleted)
                 .OrderBy(d => d.Name)
                 .ToListAsync(cancellationToken);
         }
 
-        public async Task<IEnumerable<Department>> GetDepartmentsByOrganizationAsync(
-            Guid organizationId,
-            CancellationToken cancellationToken = default)
+        public async Task<IEnumerable<Department>> GetDepartmentsByOrganizationAsync(Guid organizationId, CancellationToken cancellationToken = default)
         {
             return await _dbSet
                 .Include(d => d.Project)
                 .Include(d => d.Supervisor)
-                .Where(d => d.OrganizationId == organizationId && !d.IsDeleted)
+                .Where(d => d.Project.OrganizationId == organizationId && !d.IsDeleted)
                 .OrderBy(d => d.Name)
                 .ToListAsync(cancellationToken);
         }
 
-        public async Task<Department?> GetWithTasksAsync(
-            Guid departmentId,
-            CancellationToken cancellationToken = default)
+        public async Task<Department?> GetWithTasksAsync(Guid departmentId, CancellationToken cancellationToken = default)
         {
             return await _dbSet
                 .Include(d => d.Supervisor)
-                .Include(d => d.Organization)
+                .Include(d => d.Project)
                 .Include(d => d.Tasks.Where(t => !t.IsDeleted))
                     .ThenInclude(t => t.AssignedToUser)
                 .FirstOrDefaultAsync(d => d.Id == departmentId && !d.IsDeleted, cancellationToken);

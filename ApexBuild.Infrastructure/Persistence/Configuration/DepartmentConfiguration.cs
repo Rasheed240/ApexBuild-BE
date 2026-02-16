@@ -35,8 +35,8 @@ namespace ApexBuild.Infrastructure.Persistence.Configuration
             //builder.Property(d => d.ProjectAdminId)
             //    .HasColumnName("project_admin_id");
 
-            builder.Property(d => d.OrganizationId)
-                .HasColumnName("organization_id");
+            // builder.Property(d => d.OrganizationId) // removed: Department.OrganizationId was removed
+            //    .HasColumnName("organization_id");
 
             builder.Property(d => d.IsActive)
                 .HasColumnName("is_active");

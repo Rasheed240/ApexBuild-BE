@@ -90,10 +90,10 @@ namespace ApexBuild.Infrastructure.Persistence.Configuration
                 .HasForeignKey(m => m.OrganizationId)
                 .OnDelete(DeleteBehavior.Cascade);
 
-            builder.HasMany(o => o.Departments)
-                .WithOne(d => d.Organization)
-                .HasForeignKey(d => d.OrganizationId)
-                .OnDelete(DeleteBehavior.Cascade);
+            // builder.HasMany(o => o.Departments) // removed: Department has no direct OrganizationId
+            // .WithOne(d => d.Organization) // removed: Department has no direct OrganizationId
+            // .HasForeignKey(d => d.OrganizationId) // removed: Department has no direct OrganizationId
+            // .OnDelete(DeleteBehavior.Cascade); // removed: Department has no direct OrganizationId
 
             builder.HasMany(o => o.WorkInfos)
                 .WithOne(w => w.Organization)

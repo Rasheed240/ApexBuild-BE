@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -41,23 +41,16 @@ namespace ApexBuild.Infrastructure.Services
                     return;
                 }
 
-                // Check if subscription is still valid and set for auto-renewal
                 if (!subscription.AutoRenew || subscription.Status == SubscriptionStatus.Cancelled)
                 {
-                    _logger.LogInformation(
-                        "Subscription {SubscriptionId} is not eligible for renewal",
-                        subscriptionId);
+                    _logger.LogInformation("Subscription {SubscriptionId} is not eligible for renewal", subscriptionId);
                     return;
                 }
 
-                // Charge the customer
-                var chargeResult = await _paymentProcessingService.ChargeSubscriptionAsync(
-                    subscriptionId,
-                    subscription.StripeCustomerId);
+                var chargeResult = await _paymentProcessingService.ChargeSubscriptionAsync(subscriptionId, subscription.StripeCustomerId);
 
                 if (chargeResult.Success)
                 {
-                    // Update subscription dates
                     subscription.BillingStartDate = subscription.BillingEndDate;
                     subscription.BillingEndDate = subscription.BillingEndDate.AddMonths(1);
                     subscription.NextBillingDate = subscription.BillingEndDate;
@@ -67,19 +60,13 @@ namespace ApexBuild.Infrastructure.Services
                     _unitOfWork.Subscriptions.Update(subscription);
                     await _unitOfWork.SaveChangesAsync();
 
-                    _logger.LogInformation(
-                        "Subscription {SubscriptionId} renewed successfully. Charge ID: {ChargeId}",
-                        subscriptionId, chargeResult.ChargeId);
+                    _logger.LogInformation("Subscription {SubscriptionId} renewed successfully. Charge ID: {ChargeId}", subscriptionId, chargeResult.ChargeId);
 
-                    // Send renewal notification
                     await SendRenewalNotificationAsync(subscriptionId);
                 }
                 else
                 {
-                    _logger.LogWarning(
-                        "Failed to charge subscription {SubscriptionId}: {ErrorMessage}",
-                        subscriptionId, chargeResult.ErrorMessage);
-
+                    _logger.LogWarning("Failed to charge subscription {SubscriptionId}: {ErrorMessage}", subscriptionId, chargeResult.ErrorMessage);
                     subscription.Status = SubscriptionStatus.PendingPayment;
                     _unitOfWork.Subscriptions.Update(subscription);
                     await _unitOfWork.SaveChangesAsync();
@@ -87,10 +74,7 @@ namespace ApexBuild.Infrastructure.Services
             }
             catch (Exception ex)
             {
-                _logger.LogError(
-                    ex,
-                    "Error processing subscription renewal for {SubscriptionId}",
-                    subscriptionId);
+                _logger.LogError(ex, "Error processing subscription renewal for {SubscriptionId}", subscriptionId);
             }
         }
 
@@ -100,21 +84,15 @@ namespace ApexBuild.Infrastructure.Services
             {
                 _logger.LogInformation("Starting daily subscription renewal check");
 
-                // Get subscriptions expiring within next 24 hours
-                var expiringSubscriptions = await _unitOfWork.Subscriptions
-                    .GetExpiringSubscriptionsAsync(1); // Check within 1 day
+                var expiringSubscriptions = await _unitOfWork.Subscriptions.GetExpiringSubscriptionsAsync(1);
 
-                _logger.LogInformation(
-                    "Found {Count} subscriptions expiring within 24 hours",
-                    expiringSubscriptions.Count);
+                _logger.LogInformation("Found {Count} subscriptions expiring within 24 hours", expiringSubscriptions.Count);
 
                 foreach (var subscription in expiringSubscriptions.Where(s => s.AutoRenew))
                 {
-                    // Process renewal
                     await ProcessSubscriptionRenewalAsync(subscription.Id);
                 }
 
-                // Also check for truly expired subscriptions
                 var expiredSubscriptions = await _unitOfWork.Subscriptions.GetExpiredSubscriptionsAsync();
                 foreach (var subscription in expiredSubscriptions
                     .Where(s => s.Status != SubscriptionStatus.Expired && s.Status != SubscriptionStatus.Cancelled))
@@ -133,46 +111,25 @@ namespace ApexBuild.Infrastructure.Services
             try
             {
                 var subscription = await _unitOfWork.Subscriptions.GetByIdAsync(subscriptionId);
-                if (subscription == null)
-                {
-                    return;
-                }
+                if (subscription == null) return;
 
                 var owner = subscription.User;
-                if (owner == null)
-                {
-                    return;
-                }
+                if (owner == null) return;
 
-                var subject = $"Subscription Renewal Confirmation - {subscription.Organization.Name}";
-                var message = $@"
-Your subscription for {subscription.Organization.Name} has been successfully renewed.
+                var subject = "Subscription Renewal Confirmation - " + subscription.Organization.Name;
+                var message = "Your subscription for " + subscription.Organization.Name + " has been successfully renewed.\n\n"
+                    + "Active Users: " + subscription.ActiveUserCount + "\n"
+                    + "Monthly Amount: " + subscription.TotalMonthlyAmount.ToString("F2") + "\n"
+                    + "Billing Period: " + subscription.BillingStartDate.ToString("yyyy-MM-dd") + " to " + subscription.BillingEndDate.ToString("yyyy-MM-dd") + "\n"
+                    + "Next Renewal: " + subscription.RenewalDate?.ToString("yyyy-MM-dd") + "\n";
 
-Subscription Details:
-- Organization: {subscription.Organization.Name}
-- Licenses: {subscription.NumberOfLicenses}
-- Monthly Amount: ${subscription.TotalMonthlyAmount:F2}
-- Billing Period: {subscription.BillingStartDate:yyyy-MM-dd} to {subscription.BillingEndDate:yyyy-MM-dd}
-- Next Renewal: {subscription.RenewalDate:yyyy-MM-dd}
+                await _emailService.SendEmailAsync(owner.Email, subject, message);
 
-Thank you for your continued business.
-";
-
-                await _emailService.SendEmailAsync(
-                    owner.Email,
-                    subject,
-                    message);
-
-                _logger.LogInformation(
-                    "Renewal notification sent to {Email} for subscription {SubscriptionId}",
-                    owner.Email, subscriptionId);
+                _logger.LogInformation("Renewal notification sent to {Email} for subscription {SubscriptionId}", owner.Email, subscriptionId);
             }
             catch (Exception ex)
             {
-                _logger.LogError(
-                    ex,
-                    "Error sending renewal notification for subscription {SubscriptionId}",
-                    subscriptionId);
+                _logger.LogError(ex, "Error sending renewal notification for subscription {SubscriptionId}", subscriptionId);
             }
         }
 
@@ -181,63 +138,32 @@ Thank you for your continued business.
             try
             {
                 var subscription = await _unitOfWork.Subscriptions.GetByIdAsync(subscriptionId);
-                if (subscription == null)
-                {
-                    return;
-                }
+                if (subscription == null) return;
 
-                _logger.LogInformation(
-                    "Handling expiration for subscription {SubscriptionId}",
-                    subscriptionId);
+                _logger.LogInformation("Handling expiration for subscription {SubscriptionId}", subscriptionId);
 
-                // Mark subscription as expired
                 subscription.Status = SubscriptionStatus.Expired;
                 subscription.AutoRenew = false;
                 _unitOfWork.Subscriptions.Update(subscription);
 
-                // Get all active licenses and revoke them
-                var activeLicenses = await _unitOfWork.OrganizationLicenses
-                    .GetActiveLicensesByOrganizationAsync(subscription.OrganizationId);
-
-                foreach (var license in activeLicenses)
-                {
-                    license.Status = LicenseStatus.Expired;
-                    license.RevokedAt = DateTime.UtcNow;
-                    license.RevocationReason = "Subscription expired";
-                    _unitOfWork.OrganizationLicenses.Update(license);
-                }
-
                 await _unitOfWork.SaveChangesAsync();
 
-                _logger.LogInformation(
-                    "Subscription {SubscriptionId} expired. {LicenseCount} licenses revoked",
-                    subscriptionId, activeLicenses.Count);
+                _logger.LogInformation("Subscription {SubscriptionId} expired.", subscriptionId);
 
-                // Send notification
                 var owner = subscription.User;
                 if (owner != null)
                 {
-                    var subject = $"Subscription Expired - {subscription.Organization.Name}";
-                    var message = $@"
-Your subscription for {subscription.Organization.Name} has expired.
+                    var subject = "Subscription Expired - " + subscription.Organization.Name;
+                    var message = "Your subscription for " + subscription.Organization.Name + " has expired.\n\n"
+                        + "Users will no longer have access to the platform.\n\n"
+                        + "Please contact support or renew your subscription to regain access.\n";
 
-All active licenses have been revoked. Users will no longer have access to the platform.
-
-Please contact support or renew your subscription to regain access.
-";
-
-                    await _emailService.SendEmailAsync(
-                        owner.Email,
-                        subject,
-                        message);
+                    await _emailService.SendEmailAsync(owner.Email, subject, message);
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogError(
-                    ex,
-                    "Error handling subscription expiration for {SubscriptionId}",
-                    subscriptionId);
+                _logger.LogError(ex, "Error handling subscription expiration for {SubscriptionId}", subscriptionId);
             }
         }
     }

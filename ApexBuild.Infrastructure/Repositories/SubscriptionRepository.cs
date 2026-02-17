@@ -12,16 +12,13 @@ namespace ApexBuild.Infrastructure.Repositories
 {
     public class SubscriptionRepository : BaseRepository<Subscription>, ISubscriptionRepository
     {
-        public SubscriptionRepository(ApplicationDbContext context) : base(context)
-        {
-        }
+        public SubscriptionRepository(ApplicationDbContext context) : base(context) { }
 
         public override async Task<Subscription?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
         {
             return await _dbSet
                 .Include(s => s.Organization)
                 .Include(s => s.User)
-                .Include(s => s.OrganizationLicenses)
                 .FirstOrDefaultAsync(s => s.Id == id && !s.IsDeleted, cancellationToken);
         }
 
@@ -30,7 +27,6 @@ namespace ApexBuild.Infrastructure.Repositories
             return await _dbSet
                 .Include(s => s.Organization)
                 .Include(s => s.User)
-                .Include(s => s.OrganizationLicenses)
                 .FirstOrDefaultAsync(s => s.OrganizationId == organizationId && !s.IsDeleted, cancellationToken);
         }
 
@@ -55,9 +51,7 @@ namespace ApexBuild.Infrastructure.Repositories
         {
             var expirationDate = DateTime.UtcNow.AddDays(daysUntilExpiration);
             return await _dbSet
-                .Where(s => !s.IsDeleted &&
-                       s.BillingEndDate > DateTime.UtcNow &&
-                       s.BillingEndDate <= expirationDate)
+                .Where(s => !s.IsDeleted && s.BillingEndDate > DateTime.UtcNow && s.BillingEndDate <= expirationDate)
                 .Include(s => s.Organization)
                 .Include(s => s.User)
                 .ToListAsync(cancellationToken);
@@ -74,8 +68,7 @@ namespace ApexBuild.Infrastructure.Repositories
 
         public async Task<bool> ExistsForOrganizationAsync(Guid organizationId, CancellationToken cancellationToken = default)
         {
-            return await _dbSet
-                .AnyAsync(s => s.OrganizationId == organizationId && !s.IsDeleted, cancellationToken);
+            return await _dbSet.AnyAsync(s => s.OrganizationId == organizationId && !s.IsDeleted, cancellationToken);
         }
     }
 }

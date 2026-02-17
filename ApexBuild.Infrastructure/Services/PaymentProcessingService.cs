@@ -75,7 +75,7 @@ namespace ApexBuild.Infrastructure.Services
                         Amount = subscription.TotalMonthlyAmount,
                         TransactionDate = DateTime.UtcNow,
                         ProcessedAt = DateTime.UtcNow,
-                        Description = $"Subscription renewal - {subscription.NumberOfLicenses} licenses",
+                        Description = $"Subscription renewal - {subscription.ActiveUserCount} active users",
                         RetryCount = 0
                     };
 
@@ -103,7 +103,7 @@ namespace ApexBuild.Infrastructure.Services
                         Status = PaymentStatus.Failed,
                         Amount = subscription.TotalMonthlyAmount,
                         TransactionDate = DateTime.UtcNow,
-                        Description = $"Subscription renewal - {subscription.NumberOfLicenses} licenses",
+                        Description = $"Subscription renewal - {subscription.ActiveUserCount} active users",
                         ErrorMessage = chargeResult.ErrorMessage,
                         RetryCount = 0,
                         MaxRetries = _stripeSettings.MaxRetryAttempts,

@@ -44,6 +44,13 @@ namespace ApexBuild.Api.Controllers
                     return BadRequest(ApiResponse.Failure<object>("No file provided"));
                 }
 
+                const long maxFileSizeBytes = 5 * 1024 * 1024; // 5 MB
+                if (file.Length > maxFileSizeBytes)
+                {
+                    return BadRequest(ApiResponse.Failure<object>(
+                        $"File size ({file.Length / (1024 * 1024.0):F1} MB) exceeds the maximum allowed size of {maxFileSizeBytes / (1024 * 1024)} MB"));
+                }
+
                 var userId = _currentUserService.UserId;
                 if (!userId.HasValue)
                 {
@@ -118,6 +125,13 @@ namespace ApexBuild.Api.Controllers
                 if (file == null || file.Length == 0)
                 {
                     return BadRequest(ApiResponse.Failure<object>("No file provided"));
+                }
+
+                const long maxFileSizeBytes = 5 * 1024 * 1024; // 5 MB
+                if (file.Length > maxFileSizeBytes)
+                {
+                    return BadRequest(ApiResponse.Failure<object>(
+                        $"File size ({file.Length / (1024 * 1024.0):F1} MB) exceeds the maximum allowed size of {maxFileSizeBytes / (1024 * 1024)} MB"));
                 }
 
                 var userId = _currentUserService.UserId;

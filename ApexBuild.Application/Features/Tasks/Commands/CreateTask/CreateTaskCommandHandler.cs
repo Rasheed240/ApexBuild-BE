@@ -69,13 +69,18 @@ public class CreateTaskCommandHandler : IRequestHandler<CreateTaskCommand, Creat
             // Ensure parent task is in the same department
             if (parentTask.DepartmentId != request.DepartmentId)
             {
-                throw new BadRequestException("Parent task must be in the same department");
+                throw new BadRequestException(
+                    $"Parent task '{parentTask.Code}' belongs to department {parentTask.DepartmentId} " +
+                    $"but the new task targets department {request.DepartmentId}. " +
+                    "Parent and child tasks must be in the same department.");
             }
 
             // Prevent circular references (parent cannot be a subtask itself)
             if (parentTask.ParentTaskId.HasValue)
             {
-                throw new BadRequestException("Cannot create a subtask of a subtask");
+                throw new BadRequestException(
+                    $"Task '{parentTask.Code}' is already a subtask of {parentTask.ParentTaskId}. " +
+                    "Only one level of nesting is supported.");
             }
         }
 

@@ -28,7 +28,7 @@ namespace ApexBuild.Infrastructure.Services
         {
             if (stream == null)
             {
-                throw new ArgumentException("Stream is null", nameof(stream));
+                throw new ArgumentNullException(nameof(stream), "Upload stream cannot be null");
             }
 
             if (string.IsNullOrWhiteSpace(fileName))
@@ -78,7 +78,7 @@ namespace ApexBuild.Infrastructure.Services
         {
             if (stream == null)
             {
-                throw new ArgumentException("Stream is null", nameof(stream));
+                throw new ArgumentNullException(nameof(stream), "Upload stream cannot be null");
             }
 
             if (string.IsNullOrWhiteSpace(fileName))
@@ -122,7 +122,7 @@ namespace ApexBuild.Infrastructure.Services
         {
             if (stream == null)
             {
-                throw new ArgumentException("Stream is null", nameof(stream));
+                throw new ArgumentNullException(nameof(stream), "Upload stream cannot be null");
             }
 
             if (string.IsNullOrWhiteSpace(fileName))

@@ -34,36 +34,30 @@ public class SubmitTaskUpdateCommandHandler : IRequestHandler<SubmitTaskUpdateCo
             throw new UnauthorizedException("User must be authenticated to submit a task update");
         }
 
-        // Get task with department
-        var task = await _unitOfWork.Tasks.GetByIdWithIncludesAsync(
-            request.TaskId,
-            cancellationToken,
-            t => t.Department,
-            t => t.AssignedToUser);
-
+        // Get task
+        var task = await _unitOfWork.Tasks.GetByIdAsync(request.TaskId, cancellationToken);
         if (task == null || task.IsDeleted)
-        {
             throw new NotFoundException("Task", request.TaskId);
-        }
 
-        // Verify user is assigned to the task
-        if (task.AssignedToUserId != currentUserId.Value)
-        {
-            throw new ForbiddenException("Only the assigned user can submit updates for this task");
-        }
+        // Verify current user is an active assignee on this task
+        var isAssignee = await _unitOfWork.TaskUsers.AnyAsync(
+            tu => tu.TaskId == task.Id && tu.UserId == currentUserId.Value && tu.IsActive,
+            cancellationToken);
+        if (!isAssignee)
+            throw new ForbiddenException("Only users assigned to this task can submit updates.");
+
+        // Get current user's name for notifications
+        var currentUser = await _unitOfWork.Users.GetByIdAsync(currentUserId.Value, cancellationToken);
+        var submitterName = currentUser?.FullName ?? "Unknown";
 
         // Get department and project
         var department = await _unitOfWork.Departments.GetByIdAsync(task.DepartmentId, cancellationToken);
         if (department == null || department.IsDeleted)
-        {
             throw new NotFoundException("Department", task.DepartmentId);
-        }
 
         var project = await _unitOfWork.Projects.GetByIdAsync(department.ProjectId, cancellationToken);
         if (project == null || project.IsDeleted)
-        {
             throw new NotFoundException("Project", department.ProjectId);
-        }
 
         // Check if it's a workday (Monday-Friday)
         var submittedAt = request.SubmittedAt ?? _dateTimeService.UtcNow;
@@ -125,20 +119,23 @@ public class SubmitTaskUpdateCommandHandler : IRequestHandler<SubmitTaskUpdateCo
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-        // Notify department supervisor if exists
-        if (department.SupervisorId.HasValue)
+        // Route update through the correct review chain:
+        // Contracted task  → ContractorAdmin → DepartmentSupervisor → ProjectAdmin
+        // Non-contracted   → DepartmentSupervisor (if any) → ProjectAdmin
+        if (task.ContractorId.HasValue)
         {
-            var supervisor = await _unitOfWork.Users.GetByIdAsync(department.SupervisorId.Value, cancellationToken);
-            if (supervisor != null)
+            // Contracted: route to ContractorAdmin first
+            var contractor = await _unitOfWork.Contractors.GetByIdAsync(task.ContractorId.Value, cancellationToken);
+            if (contractor != null)
             {
-                taskUpdate.Status = UpdateStatus.UnderSupervisorReview;
+                taskUpdate.Status = UpdateStatus.UnderContractorAdminReview;
                 await _unitOfWork.TaskUpdates.UpdateAsync(taskUpdate, cancellationToken);
                 await _unitOfWork.SaveChangesAsync(cancellationToken);
 
                 await _notificationService.SendNotificationAsync(
-                    department.SupervisorId.Value,
+                    contractor.ContractorAdminId,
                     "New Daily Report Submitted",
-                    $"A daily report has been submitted for task '{task.Title}' by {task.AssignedToUser?.FullName ?? "Unknown"}. Please review.",
+                    $"A daily report has been submitted for task '{task.Title}' by {submitterName}. Please review.",
                     NotificationType.PendingApproval,
                     NotificationChannel.Both,
                     taskUpdate.Id,
@@ -147,21 +144,38 @@ public class SubmitTaskUpdateCommandHandler : IRequestHandler<SubmitTaskUpdateCo
                     $"/tasks/{task.Id}/updates/{taskUpdate.Id}");
             }
         }
+        else if (department.SupervisorId.HasValue)
+        {
+            // Non-contracted with supervisor
+            taskUpdate.Status = UpdateStatus.UnderSupervisorReview;
+            await _unitOfWork.TaskUpdates.UpdateAsync(taskUpdate, cancellationToken);
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+            await _notificationService.SendNotificationAsync(
+                department.SupervisorId.Value,
+                "New Daily Report Submitted",
+                $"A daily report has been submitted for task '{task.Title}' by {submitterName}. Please review.",
+                NotificationType.PendingApproval,
+                NotificationChannel.Both,
+                taskUpdate.Id,
+                "TaskUpdate",
+                null,
+                $"/tasks/{task.Id}/updates/{taskUpdate.Id}");
+        }
         else
         {
-            // If no supervisor, move directly to admin review
+            // No contractor, no supervisor — route straight to admin
             taskUpdate.Status = UpdateStatus.UnderAdminReview;
             await _unitOfWork.TaskUpdates.UpdateAsync(taskUpdate, cancellationToken);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-            // Notify project admin or owner
             var adminId = project.ProjectAdminId ?? project.ProjectOwnerId;
             if (adminId.HasValue)
             {
                 await _notificationService.SendNotificationAsync(
                     adminId.Value,
                     "New Daily Report Submitted",
-                    $"A daily report has been submitted for task '{task.Title}' by {task.AssignedToUser?.FullName ?? "Unknown"}. Please review.",
+                    $"A daily report has been submitted for task '{task.Title}' by {submitterName}. Please review.",
                     NotificationType.PendingApproval,
                     NotificationChannel.Both,
                     taskUpdate.Id,

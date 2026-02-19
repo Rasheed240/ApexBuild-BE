@@ -19,14 +19,15 @@ namespace ApexBuild.Application.Features.Projects.Queries.GetProjectMembers
 
         public async Task<GetProjectMembersResponse> Handle(GetProjectMembersQuery request, CancellationToken cancellationToken)
         {
-            _currentUserService.UserId ?? throw new UnauthorizedException("User not authenticated");
+            if (!_currentUserService.UserId.HasValue)
+                throw new UnauthorizedException("User not authenticated");
 
             var project = await _unitOfWork.Projects.GetByIdAsync(request.ProjectId, cancellationToken);
             if (project == null || project.IsDeleted)
                 throw new NotFoundException("Project", request.ProjectId);
 
             // Base: all ProjectUser records for this project (authoritative membership)
-            var puQuery = _unitOfWork.ProjectUsers.GetAll()
+            IQueryable<ProjectUser> puQuery = _unitOfWork.ProjectUsers.GetAll()
                 .Where(pu => pu.ProjectId == request.ProjectId)
                 .Include(pu => pu.User);
 

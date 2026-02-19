@@ -84,14 +84,14 @@ public class UpdateTaskCommandHandler : IRequestHandler<UpdateTaskCommand, Updat
         // Update assignees if provided
         if (request.AssignedUserIds != null)
         {
-            // Validate all users exist
+            // Validate all users are active members of this project
             foreach (var userId in request.AssignedUserIds)
             {
-                var assignedUser = await _unitOfWork.Users.GetByIdAsync(userId, cancellationToken);
-                if (assignedUser == null)
-                {
-                    throw new NotFoundException("User", userId);
-                }
+                var isMember = await _unitOfWork.ProjectUsers.AnyAsync(
+                    pu => pu.ProjectId == project.Id && pu.UserId == userId && pu.IsActive,
+                    cancellationToken);
+                if (!isMember)
+                    throw new BadRequestException($"User {userId} is not an active member of this project.");
             }
 
             // Remove all existing assignments

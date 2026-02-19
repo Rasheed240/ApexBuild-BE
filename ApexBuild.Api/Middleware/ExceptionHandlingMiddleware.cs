@@ -1,8 +1,10 @@
 using System.Net;
 using System.Text.Json;
+using System.Linq;
 using ApexBuild.Application.Common.Exceptions;
 using ApexBuild.Contracts.Responses;
 using FluentValidation;
+using FluentValidation.Results;
 using Microsoft.Extensions.Logging;
 
 namespace ApexBuild.Api.Middleware;
@@ -68,15 +70,12 @@ public class ExceptionHandlingMiddleware
         {
             case ValidationException validationException:
                 response.StatusCode = (int)HttpStatusCode.BadRequest;
-                responseModel.Errors = validationException.Errors
-                    .GroupBy(e => e.PropertyName)
-                    .ToDictionary(
-                        g => g.Key,
-                        g => g.Select(e => e.ErrorMessage).ToArray()
-                    );
+                var errors = validationException.Errors.ToList();
+                responseModel.Errors = errors
+                    .GroupBy((ValidationFailure e) => e.PropertyName)
+                    .ToDictionary(g => g.Key, g => g.Select(e => e.ErrorMessage).ToArray());
                 responseModel.Message = "Validation failed";
-                var errorCount = validationException.Errors.Count;
-                _logger.LogWarning(exception, "Validation error with {ErrorCount} violation(s)", errorCount);
+                _logger.LogWarning(exception, "Validation error with {ErrorCount} violation(s)", errors.Count);
                 break;
 
             case NotFoundException:

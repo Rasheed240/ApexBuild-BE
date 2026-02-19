@@ -84,16 +84,16 @@ public class CreateTaskCommandHandler : IRequestHandler<CreateTaskCommand, Creat
             }
         }
 
-        // Validate assigned users if provided
+        // Validate assigned users are active members of this project
         if (request.AssignedUserIds != null && request.AssignedUserIds.Any())
         {
             foreach (var userId in request.AssignedUserIds)
             {
-                var assignedUser = await _unitOfWork.Users.GetByIdAsync(userId, cancellationToken);
-                if (assignedUser == null)
-                {
-                    throw new NotFoundException("User", userId);
-                }
+                var isMember = await _unitOfWork.ProjectUsers.AnyAsync(
+                    pu => pu.ProjectId == project.Id && pu.UserId == userId && pu.IsActive,
+                    cancellationToken);
+                if (!isMember)
+                    throw new BadRequestException($"User {userId} is not an active member of this project.");
             }
         }
 

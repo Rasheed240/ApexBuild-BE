@@ -52,6 +52,7 @@ namespace ApexBuild.Infrastructure.Data
                 await SeedProjectUsersAsync(projects, users, roles, cancellationToken);
                 var tasks       = await SeedTasksAsync(projects, departments, contractors, milestones, users, cancellationToken);
                 await SeedSubtasksAsync(tasks, users, cancellationToken);
+                await SeedTaskUsersAsync(cancellationToken);
                 await SeedTaskUpdatesAsync(tasks, users, cancellationToken);
                 await SeedTaskCommentsAsync(tasks, users, cancellationToken);
                 await SeedWorkInfosAsync(projects, departments, contractors, users, orgs, cancellationToken);
@@ -739,6 +740,41 @@ namespace ApexBuild.Infrastructure.Data
             }
             await _unitOfWork.SaveChangesAsync(ct);
             _logger.LogInformation("Seeded subtasks.");
+        }
+
+        // ============================================================
+        //  TASK USERS (assignees for all seeded tasks + subtasks)
+        // ============================================================
+        private async Task SeedTaskUsersAsync(CancellationToken ct)
+        {
+            _logger.LogInformation("Seeding task user assignments...");
+
+            // Load every non-deleted task that has an AssignedToUserId
+            var allTasks = await _unitOfWork.Tasks.FindAsync(
+                t => !t.IsDeleted && t.AssignedToUserId.HasValue, ct);
+
+            foreach (var task in allTasks)
+            {
+                var userId = task.AssignedToUserId!.Value;
+                // Idempotent: skip if the TaskUser record already exists
+                var exists = await _unitOfWork.TaskUsers.AnyAsync(
+                    tu => tu.TaskId == task.Id && tu.UserId == userId, ct);
+                if (exists) continue;
+
+                await _unitOfWork.TaskUsers.AddAsync(new TaskUser
+                {
+                    Id           = Guid.NewGuid(),
+                    TaskId       = task.Id,
+                    UserId       = userId,
+                    AssignedByUserId = task.AssignedByUserId,
+                    Role         = "Assignee",
+                    IsActive     = true,
+                    AssignedAt   = task.CreatedAt,
+                }, ct);
+            }
+
+            await _unitOfWork.SaveChangesAsync(ct);
+            _logger.LogInformation("Seeded task user assignments.");
         }
 
         // ============================================================

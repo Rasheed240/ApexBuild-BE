@@ -84,6 +84,9 @@ public class UpdateTaskCommandHandler : IRequestHandler<UpdateTaskCommand, Updat
         // Update assignees if provided
         if (request.AssignedUserIds != null)
         {
+            if (!request.AssignedUserIds.Any())
+                throw new BadRequestException("At least one assignee is required. To keep existing assignees, omit the AssignedUserIds field.");
+
             // Validate all users are active members of this project
             foreach (var userId in request.AssignedUserIds)
             {

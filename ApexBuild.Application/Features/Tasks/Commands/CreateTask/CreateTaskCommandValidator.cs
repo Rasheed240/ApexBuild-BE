@@ -34,5 +34,8 @@ public class CreateTaskCommandValidator : AbstractValidator<CreateTaskCommand>
         RuleFor(x => x.StartDate)
             .LessThan(x => x.DueDate).When(x => x.StartDate.HasValue && x.DueDate.HasValue)
             .WithMessage("Start date must be before due date");
+
+        RuleFor(x => x.AssignedUserIds)
+            .NotEmpty().WithMessage("At least one assignee is required.");
     }
 }

@@ -49,6 +49,7 @@ namespace ApexBuild.Infrastructure.Repositories
             return await _dbSet
                 .Include(t => t.Department)
                 .Include(t => t.AssignedToUser)
+                .Include(t => t.AssignedByUser)
                 .Include(t => t.Updates.Where(u => !u.IsDeleted))
                     .ThenInclude(u => u.SubmittedByUser)
                 .Include(t => t.Updates.Where(u => !u.IsDeleted))

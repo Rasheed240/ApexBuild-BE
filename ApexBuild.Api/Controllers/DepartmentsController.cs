@@ -29,6 +29,11 @@ namespace ApexBuild.Api.Controllers
         [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status401Unauthorized)]
         public async Task<ActionResult<ApiResponse<List<DepartmentDto>>>> GetByProject(Guid projectId, CancellationToken cancellationToken)
         {
+            if (projectId == Guid.Empty)
+            {
+                return BadRequest(ApiResponse.Failure<object>("A valid project ID is required."));
+            }
+
             var result = await _mediator.Send(new GetDepartmentsByProjectQuery(projectId), cancellationToken);
             return Ok(ApiResponse.Success<List<DepartmentDto>>(result));
         }

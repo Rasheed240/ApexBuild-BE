@@ -89,8 +89,9 @@ namespace ApexBuild.Infrastructure
             services.AddScoped<PendingApprovalReminderJob>();
             services.AddScoped<ExpiredInvitationCleanupJob>();
 
-            // Register Database Seeder
+            // Register Database Seeders
             services.AddScoped<ApexBuild.Infrastructure.Data.DatabaseSeeder>();
+            services.AddScoped<ApexBuild.Infrastructure.Data.DatabaseSeeder2>();
 
             return services;
         }

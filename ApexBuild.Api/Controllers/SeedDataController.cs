@@ -9,11 +9,13 @@ namespace ApexBuild.Api.Controllers
     public class SeedDataController : ControllerBase
     {
         private readonly DatabaseSeeder _seeder;
+        private readonly DatabaseSeeder2 _seeder2;
         private readonly ILogger<SeedDataController> _logger;
 
-        public SeedDataController(DatabaseSeeder seeder, ILogger<SeedDataController> logger)
+        public SeedDataController(DatabaseSeeder seeder, DatabaseSeeder2 seeder2, ILogger<SeedDataController> logger)
         {
             _seeder = seeder;
+            _seeder2 = seeder2;
             _logger = logger;
         }
 
@@ -51,6 +53,48 @@ namespace ApexBuild.Api.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error in seed database endpoint");
+                return StatusCode(500, new
+                {
+                    success = false,
+                    message = $"Internal server error: {ex.Message}",
+                    timestamp = DateTime.UtcNow
+                });
+            }
+        }
+
+        /// <summary>
+        /// Seeds the database with the second batch of test data (Spaceship + Stadium projects)
+        /// </summary>
+        [HttpPost("seed2")]
+        [AllowAnonymous]
+        public async Task<IActionResult> SeedDatabase2(CancellationToken cancellationToken)
+        {
+            try
+            {
+                _logger.LogInformation("Seed2 database endpoint called");
+
+                var (success, message) = await _seeder2.SeedAsync(cancellationToken);
+
+                if (success)
+                {
+                    return Ok(new
+                    {
+                        success = true,
+                        message = message,
+                        timestamp = DateTime.UtcNow
+                    });
+                }
+
+                return BadRequest(new
+                {
+                    success = false,
+                    message = message,
+                    timestamp = DateTime.UtcNow
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in seed2 database endpoint");
                 return StatusCode(500, new
                 {
                     success = false,

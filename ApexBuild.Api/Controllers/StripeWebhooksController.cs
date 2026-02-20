@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
@@ -138,8 +138,8 @@ namespace ApexBuild.Api.Controllers
             }
 
             _logger.LogInformation(
-                "Charge succeeded: {ChargeId}",
-                charge.Id);
+                "Charge succeeded: {ChargeId}, Amount: {Amount}",
+                charge.Id, charge.Amount);
 
             // Update payment transaction if it exists
             var transaction = await _unitOfWork.PaymentTransactions.GetByStripeChargeIdAsync(charge.Id);
@@ -149,6 +149,16 @@ namespace ApexBuild.Api.Controllers
                 transaction.ProcessedAt = DateTime.UtcNow;
                 _unitOfWork.PaymentTransactions.Update(transaction);
                 await _unitOfWork.SaveChangesAsync();
+
+                _logger.LogInformation(
+                    "Payment transaction {TransactionId} marked as completed for charge {ChargeId}",
+                    transaction.Id, charge.Id);
+            }
+            else
+            {
+                _logger.LogWarning(
+                    "No matching payment transaction found for successful charge {ChargeId}",
+                    charge.Id);
             }
         }
 
@@ -173,6 +183,10 @@ namespace ApexBuild.Api.Controllers
                 transaction.ErrorMessage = charge.FailureMessage;
                 _unitOfWork.PaymentTransactions.Update(transaction);
                 await _unitOfWork.SaveChangesAsync();
+
+                _logger.LogWarning(
+                    "Payment transaction {TransactionId} marked as failed for charge {ChargeId}: {Reason}",
+                    transaction.Id, charge.Id, charge.FailureMessage);
             }
         }
 
@@ -320,9 +334,9 @@ namespace ApexBuild.Api.Controllers
                 {
                     long? quantity = subscription.Items.Data[0].Quantity;
 
-                    if (quantity != localSubscription.NumberOfLicenses)
+                    if (quantity != localSubscription.ActiveUserCount)
                     {
-                        localSubscription.NumberOfLicenses = (int)quantity;
+                        localSubscription.ActiveUserCount = (int)quantity;
                     }
                 }
 

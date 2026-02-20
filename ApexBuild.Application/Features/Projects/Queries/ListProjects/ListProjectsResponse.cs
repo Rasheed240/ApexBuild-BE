@@ -19,6 +19,7 @@ public record ProjectListItemDto
     public DateTime CreatedAt { get; init; }
     public int DepartmentCount { get; init; }
     public int UserCount { get; init; }
+    public int OverallProgress { get; init; }
 }
 
 public record ListProjectsResponse

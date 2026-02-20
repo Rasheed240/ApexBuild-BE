@@ -54,7 +54,8 @@ public class ListProjectsQueryHandler : IRequestHandler<ListProjectsQuery, ListP
             q => q.OrderByDescending(p => p.CreatedAt),
             p => p.ProjectOwner,
             p => p.Departments,
-            p => p.ProjectUsers);
+            p => p.ProjectUsers,
+            p => p.Milestones);
 
         var projectDtos = items.Select(p => new ProjectListItemDto
         {
@@ -72,7 +73,10 @@ public class ListProjectsQueryHandler : IRequestHandler<ListProjectsQuery, ListP
             ProjectOwnerName = p.ProjectOwner?.FullName,
             CreatedAt = p.CreatedAt,
             DepartmentCount = p.Departments?.Count(d => !d.IsDeleted) ?? 0,
-            UserCount = p.ProjectUsers?.Count(pu => pu.Status == Domain.Enums.ProjectUserStatus.Active) ?? 0
+            UserCount = p.ProjectUsers?.Count(pu => pu.Status == Domain.Enums.ProjectUserStatus.Active) ?? 0,
+            OverallProgress = p.Milestones != null && p.Milestones.Any()
+                ? (int)Math.Round(p.Milestones.Average(m => (double)m.Progress))
+                : 0
         }).ToList();
 
         var totalPages = (int)Math.Ceiling(totalCount / (double)request.PageSize);

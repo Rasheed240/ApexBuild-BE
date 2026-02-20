@@ -18,6 +18,7 @@ public class TaskUpdateRepository : BaseRepository<TaskUpdate>, ITaskUpdateRepos
     {
         return await _dbSet
             .Include(u => u.SubmittedByUser)
+            .Include(u => u.ReviewedByContractorAdmin)
             .Include(u => u.ReviewedBySupervisor)
             .Include(u => u.ReviewedByAdmin)
             .Where(u => u.TaskId == taskId && !u.IsDeleted)
@@ -71,10 +72,10 @@ public class TaskUpdateRepository : BaseRepository<TaskUpdate>, ITaskUpdateRepos
     }
 
     public async Task<(IEnumerable<TaskUpdate> Items, int TotalCount)> GetPendingForReviewAsync(
-        Guid organizationId, int pageNumber, int pageSize, CancellationToken cancellationToken = default)
+        Guid? organizationId, int pageNumber, int pageSize, CancellationToken cancellationToken = default)
     {
-        var pendingStatuses = new[] 
-        { 
+        var pendingStatuses = new[]
+        {
             (int)UpdateStatus.UnderContractorAdminReview,
             (int)UpdateStatus.UnderSupervisorReview,
             (int)UpdateStatus.UnderAdminReview
@@ -88,8 +89,11 @@ public class TaskUpdateRepository : BaseRepository<TaskUpdate>, ITaskUpdateRepos
             .Include(u => u.Task)
                 .ThenInclude(t => t.Contractor)
             .Include(u => u.SubmittedByUser)
-            .Where(u => !u.IsDeleted && pendingStatuses.Contains((int)u.Status)
-                        && u.Task.Department.Project.OrganizationId == organizationId);
+            .Where(u => !u.IsDeleted && pendingStatuses.Contains((int)u.Status));
+
+        // Filter by org when provided; omit filter for platform-wide views (SuperAdmin)
+        if (organizationId.HasValue && organizationId.Value != Guid.Empty)
+            query = query.Where(u => u.Task.Department.Project.OrganizationId == organizationId.Value);
 
         var total = await query.CountAsync(cancellationToken);
         var items = await query

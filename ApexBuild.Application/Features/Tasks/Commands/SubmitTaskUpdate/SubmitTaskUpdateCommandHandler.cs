@@ -59,15 +59,8 @@ public class SubmitTaskUpdateCommandHandler : IRequestHandler<SubmitTaskUpdateCo
         if (project == null || project.IsDeleted)
             throw new NotFoundException("Project", department.ProjectId);
 
-        // Check if it's a workday (Monday-Friday)
         var submittedAt = request.SubmittedAt ?? _dateTimeService.UtcNow;
         var submittedDate = submittedAt.Date;
-        var dayOfWeek = submittedDate.DayOfWeek;
-
-        if (dayOfWeek == DayOfWeek.Saturday || dayOfWeek == DayOfWeek.Sunday)
-        {
-            throw new BadRequestException("Daily reports can only be submitted on workdays (Monday-Friday)");
-        }
 
         // Check if user has already submitted a report for this task today
         var hasReportToday = await _unitOfWork.TaskUpdates.HasDailyReportForDateAsync(

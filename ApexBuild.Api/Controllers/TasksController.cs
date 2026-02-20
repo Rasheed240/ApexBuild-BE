@@ -15,6 +15,8 @@ using ApexBuild.Application.Features.Tasks.Queries.ListTasks;
 using ApexBuild.Application.Features.Tasks.Queries.GetMyTasks;
 using ApexBuild.Application.Features.Tasks.Queries.GetTaskComments;
 using ApexBuild.Application.Features.Tasks.Queries.GetPendingUpdates;
+using ApexBuild.Application.Features.Tasks.Queries.GetTaskUpdates;
+using ApexBuild.Application.Features.Tasks.Commands.ApproveTaskUpdateByContractorAdmin;
 using ApexBuild.Contracts.Responses;
 using ApexBuild.Domain.Enums;
 using TaskStatus = ApexBuild.Domain.Enums.TaskStatus;
@@ -50,12 +52,12 @@ public class TasksController : ControllerBase
     }
 
     /// <summary>
-    /// Get task updates pending review for the current user role within an organization
+    /// Get task updates pending review. Pass organizationId to scope; omit for platform-wide view (SuperAdmin).
     /// </summary>
     [HttpGet("pending-updates")]
     [ProducesResponseType(typeof(ApiResponse<GetPendingUpdatesResponse>), StatusCodes.Status200OK)]
     public async Task<ActionResult<ApiResponse<GetPendingUpdatesResponse>>> GetPendingUpdates(
-        [FromQuery] Guid organizationId,
+        [FromQuery] Guid? organizationId = null,
         [FromQuery] int pageNumber = 1,
         [FromQuery] int pageSize = 20)
     {
@@ -208,6 +210,36 @@ public class TasksController : ControllerBase
         var commandWithUpdateId = command with { UpdateId = updateId };
         var response = await _mediator.Send(commandWithUpdateId);
         return Ok(ApiResponse.Success(response, response.Message));
+    }
+
+    /// <summary>
+    /// Approve or reject a task update by contractor admin
+    /// </summary>
+    [HttpPost("updates/{updateId}/approve-contractor-admin")]
+    [ProducesResponseType(typeof(ApiResponse<ApproveTaskUpdateByContractorAdminResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<ApiResponse<ApproveTaskUpdateByContractorAdminResponse>>> ApproveTaskUpdateByContractorAdmin(
+        Guid updateId,
+        [FromBody] ApproveTaskUpdateByContractorAdminCommand command)
+    {
+        var commandWithUpdateId = command with { UpdateId = updateId };
+        var response = await _mediator.Send(commandWithUpdateId);
+        return Ok(ApiResponse.Success(response, response.Message));
+    }
+
+    /// <summary>
+    /// Get all updates (progress reports) for a specific task
+    /// </summary>
+    [HttpGet("{taskId}/updates")]
+    [ProducesResponseType(typeof(ApiResponse<GetTaskUpdatesResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<ApiResponse<GetTaskUpdatesResponse>>> GetTaskUpdates(Guid taskId)
+    {
+        var query = new GetTaskUpdatesQuery { TaskId = taskId };
+        var response = await _mediator.Send(query);
+        return Ok(ApiResponse.Success(response, "Task updates retrieved successfully"));
     }
 
     /// <summary>

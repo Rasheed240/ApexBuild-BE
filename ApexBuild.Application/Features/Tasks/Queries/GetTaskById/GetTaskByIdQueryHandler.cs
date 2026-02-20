@@ -2,6 +2,7 @@ using MediatR;
 using ApexBuild.Application.Common.Interfaces;
 using ApexBuild.Application.Common.Exceptions;
 using ApexBuild.Application.Features.Tasks.Common;
+using ApexBuild.Domain.Entities;
 
 namespace ApexBuild.Application.Features.Tasks.Queries.GetTaskById;
 
@@ -34,9 +35,17 @@ public class GetTaskByIdQueryHandler : IRequestHandler<GetTaskByIdQuery, GetTask
 
         var department = await _unitOfWork.Departments.GetByIdAsync(task.DepartmentId, cancellationToken);
         if (department == null || department.IsDeleted)
-        {
             throw new NotFoundException("Department", task.DepartmentId);
-        }
+
+        var project = await _unitOfWork.Projects.GetByIdAsync(department.ProjectId, cancellationToken);
+
+        Contractor? contractor = null;
+        if (task.ContractorId.HasValue)
+            contractor = await _unitOfWork.Contractors.GetByIdAsync(task.ContractorId.Value, cancellationToken);
+
+        ProjectMilestone? milestone = null;
+        if (task.MilestoneId.HasValue)
+            milestone = await _unitOfWork.Milestones.GetByIdAsync(task.MilestoneId.Value, cancellationToken);
 
         // Get parent task if exists
         var parentTask = task.ParentTaskId.HasValue
@@ -83,8 +92,14 @@ public class GetTaskByIdQueryHandler : IRequestHandler<GetTaskByIdQuery, GetTask
             Title = task.Title,
             Description = task.Description,
             Code = task.Code,
+            ProjectId = department.ProjectId,
+            ProjectName = project?.Name,
             DepartmentId = task.DepartmentId,
             DepartmentName = department.Name,
+            ContractorId = task.ContractorId,
+            ContractorName = contractor?.CompanyName,
+            MilestoneId = task.MilestoneId,
+            MilestoneName = milestone?.Title,
             ParentTaskId = task.ParentTaskId,
             ParentTaskTitle = parentTask?.Title,
             SubtaskCount = subtasks.Count(),

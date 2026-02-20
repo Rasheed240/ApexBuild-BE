@@ -10,8 +10,14 @@ public record GetTaskByIdResponse
     public string Title { get; init; } = string.Empty;
     public string Description { get; init; } = string.Empty;
     public string Code { get; init; } = string.Empty;
+    public Guid ProjectId { get; init; }
+    public string? ProjectName { get; init; }
     public Guid DepartmentId { get; init; }
     public string DepartmentName { get; init; } = string.Empty;
+    public Guid? ContractorId { get; init; }
+    public string? ContractorName { get; init; }
+    public Guid? MilestoneId { get; init; }
+    public string? MilestoneName { get; init; }
     public Guid? ParentTaskId { get; init; }
     public string? ParentTaskTitle { get; init; }
     public int SubtaskCount { get; init; }

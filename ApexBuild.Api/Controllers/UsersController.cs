@@ -109,8 +109,15 @@ namespace ApexBuild.Api.Controllers
                 user.ProfileImageUrl,
                 user.PhoneNumber,
                 user.Bio,
+                user.Address,
+                user.City,
+                user.State,
+                user.Country,
+                user.DateOfBirth,
+                user.Gender,
                 user.Status,
                 user.EmailConfirmed,
+                user.TwoFactorEnabled,
                 user.CreatedAt,
                 Roles = user.UserRoles.Where(ur => ur.IsActive).Select(ur => new
                 {
@@ -178,7 +185,7 @@ namespace ApexBuild.Api.Controllers
                 throw new ApexBuild.Application.Common.Exceptions.UnauthorizedException("User not authenticated");
             }
 
-            var user = await _unitOfWork.Users.GetByIdAsync(userId.Value);
+            var user = await _unitOfWork.Users.FirstOrDefaultAsync(u => u.Id == userId.Value);
             if (user == null)
             {
                 throw new ApexBuild.Application.Common.Exceptions.NotFoundException("User", userId.Value);

@@ -1,11 +1,15 @@
 using System;
+using ApexBuild.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
 namespace ApexBuild.Infrastructure.Migrations
 {
-    /// <inheritdoc />
+    [DbContext(typeof(ApplicationDbContext))]
+    [Migration("20260222000001_AddUserManual")]
     public partial class AddUserManual : Migration
     {
         /// <inheritdoc />

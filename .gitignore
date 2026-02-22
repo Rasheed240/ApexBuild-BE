@@ -29,3 +29,5 @@ docs/
 # OS files
 .DS_Store
 Thumbs.db
+USER_GUIDE.html
+.gitignore

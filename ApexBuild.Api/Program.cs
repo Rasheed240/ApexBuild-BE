@@ -189,17 +189,28 @@ var app = builder.Build();
 
 // Configure the HTTP request pipeline.
 
-// Global Exception Handler (must be first)
-app.UseMiddleware<ExceptionHandlingMiddleware>();
-
-// Request Logging
-app.UseMiddleware<RequestLoggingMiddleware>();
+// CORS must be FIRST — before exception handler — so CORS headers are present
+// even on 500 responses. Otherwise the browser reports a CORS error instead of the real 500.
+if (app.Environment.IsDevelopment())
+{
+    app.UseCors("AllowAll");
+}
+else
+{
+    app.UseCors("CorsPolicy");
+}
 
 // Forward headers from Render's reverse proxy (X-Forwarded-Proto, X-Forwarded-For)
 app.UseForwardedHeaders(new ForwardedHeadersOptions
 {
     ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
 });
+
+// Global Exception Handler
+app.UseMiddleware<ExceptionHandlingMiddleware>();
+
+// Request Logging
+app.UseMiddleware<RequestLoggingMiddleware>();
 
 if (app.Environment.IsDevelopment())
 {
@@ -223,16 +234,6 @@ app.UseSerilogRequestLogging();
 if (app.Environment.IsDevelopment())
 {
     app.UseHttpsRedirection();
-}
-
-// CORS
-if (app.Environment.IsDevelopment())
-{
-    app.UseCors("AllowAll");
-}
-else
-{
-    app.UseCors("CorsPolicy");
 }
 
 // Response Caching

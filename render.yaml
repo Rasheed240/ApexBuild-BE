@@ -85,7 +85,7 @@ services:
       - key: StripeSettings__Currency
         value: USD
       - key: StripeSettings__MonthlyLicenseCost
-        value: "10.00"
+        value: "20.00"
       - key: StripeSettings__MaxRetryAttempts
         value: "3"
       - key: StripeSettings__RetryDelayMinutes
@@ -108,10 +108,11 @@ services:
 
       # ── CORS ──────────────────────────────────────────────────────────────
       # ASP.NET Core reads array items as Cors__AllowedOrigins__0, __1, etc.
+      # Set these to your production frontend URL(s) in the Render dashboard.
       - key: Cors__AllowedOrigins__0
-        sync: false             # Set to your production frontend URL in dashboard
+        sync: false
       - key: Cors__AllowedOrigins__1
-        value: http://localhost:5173  # local dev fallback (can remove in prod)
+        sync: false
 
       # ── Allowed Hosts ─────────────────────────────────────────────────────
       - key: AllowedHosts

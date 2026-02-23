@@ -3,13 +3,12 @@ FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
 WORKDIR /src
 
 # Copy solution and project files
-COPY src.sln .
+COPY ApexBuild.sln .
 COPY ApexBuild.Api/ApexBuild.Api.csproj ApexBuild.Api/
 COPY ApexBuild.Application/ApexBuild.Application.csproj ApexBuild.Application/
 COPY ApexBuild.Domain/ApexBuild.Domain.csproj ApexBuild.Domain/
 COPY ApexBuild.Infrastructure/ApexBuild.Infrastructure.csproj ApexBuild.Infrastructure/
 COPY ApexBuild.Contracts/ApexBuild.Contracts.csproj ApexBuild.Contracts/
-COPY ApexBuild.Tests/ApexBuild.Tests.csproj ApexBuild.Tests/
 
 # Restore dependencies
 RUN dotnet restore

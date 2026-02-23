@@ -1,5 +1,6 @@
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
@@ -194,23 +195,35 @@ app.UseMiddleware<ExceptionHandlingMiddleware>();
 // Request Logging
 app.UseMiddleware<RequestLoggingMiddleware>();
 
+// Forward headers from Render's reverse proxy (X-Forwarded-Proto, X-Forwarded-For)
+app.UseForwardedHeaders(new ForwardedHeadersOptions
+{
+    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
+});
+
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
-    app.UseSwagger();
-    app.UseSwaggerUI(c =>
-    {
-        c.SwaggerEndpoint("/swagger/v1/swagger.json", "ApexBuild API V1");
-        c.RoutePrefix = string.Empty; // Set Swagger UI at app root
-        c.DisplayRequestDuration();
-        c.EnableDeepLinking();
-        c.EnableFilter();
-    });
 }
+
+// Swagger available in all environments so the deployed API can be tested
+app.UseSwagger();
+app.UseSwaggerUI(c =>
+{
+    c.SwaggerEndpoint("/swagger/v1/swagger.json", "ApexBuild API V1");
+    c.RoutePrefix = "swagger";
+    c.DisplayRequestDuration();
+    c.EnableDeepLinking();
+    c.EnableFilter();
+});
 
 app.UseSerilogRequestLogging();
 
-app.UseHttpsRedirection();
+// HTTPS redirect is handled by Render's reverse proxy — skip in production to avoid loops
+if (app.Environment.IsDevelopment())
+{
+    app.UseHttpsRedirection();
+}
 
 // CORS
 if (app.Environment.IsDevelopment())
@@ -286,16 +299,16 @@ app.MapControllers();
 using (var scope = app.Services.CreateScope())
 {
     var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-    //try
-    //{
-    //    await context.Database.MigrateAsync();
-    //    Log.Information("Database migrated successfully");
-    //}
-    //catch (Exception ex)
-    //{
-    //    Log.Fatal(ex, "An error occurred while migrating the database");
-    //    throw;
-    //}
+    try
+    {
+        await context.Database.MigrateAsync();
+        Log.Information("Database migrated successfully");
+    }
+    catch (Exception ex)
+    {
+        Log.Fatal(ex, "An error occurred while migrating the database");
+        throw;
+    }
 }
 
 

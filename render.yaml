@@ -104,15 +104,15 @@ services:
       - key: App__BaseUrl
         value: https://apexbuild-api.onrender.com
       - key: App__FrontendUrl
-        sync: false
+        value: https://apexbuild-corp.netlify.app
 
       # ── CORS ──────────────────────────────────────────────────────────────
       # ASP.NET Core reads array items as Cors__AllowedOrigins__0, __1, etc.
-      # Set these to your production frontend URL(s) in the Render dashboard.
       - key: Cors__AllowedOrigins__0
-        sync: false
-      - key: Cors__AllowedOrigins__1
-        sync: false
+        value: https://apexbuild-corp.netlify.app
+      # Uncomment and add more origins if needed:
+      # - key: Cors__AllowedOrigins__1
+      #   value: https://other-origin.example.com
 
       # ── Allowed Hosts ─────────────────────────────────────────────────────
       - key: AllowedHosts

@@ -34,6 +34,7 @@ public class ListProjectsQueryHandler : IRequestHandler<ListProjectsQuery, ListP
              p.Code.ToLower().Contains(request.SearchTerm.Trim().ToLower()) ||
              (p.Description != null && p.Description.ToLower().Contains(request.SearchTerm.Trim().ToLower()))) &&
             (!request.OwnerId.HasValue || p.ProjectOwnerId == request.OwnerId.Value) &&
+            (!request.OrganizationId.HasValue || p.OrganizationId == request.OrganizationId.Value) &&
             (isAdmin || !currentUserId.HasValue || 
              request.OwnerId == currentUserId ||
              p.ProjectOwnerId == currentUserId.Value ||

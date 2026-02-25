@@ -54,7 +54,7 @@ public class GetMyTasksQueryHandler : IRequestHandler<GetMyTasksQuery, GetMyTask
             ApexBuild.Domain.Enums.TaskStatus.Cancelled,
         };
 
-        // Build predicate for tasks assigned to current user (exclude subtasks)
+        // Build predicate for tasks assigned to current user (including subtasks)
         Expression<Func<ProjectTask, bool>> predicate = t =>
             !t.IsDeleted &&
             assignedTaskIds.Contains(t.Id) &&

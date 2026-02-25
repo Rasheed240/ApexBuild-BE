@@ -129,7 +129,8 @@ namespace ApexBuild.Api.Controllers
             [FromQuery] Domain.Enums.ProjectStatus? status = null,
             [FromQuery] string? projectType = null,
             [FromQuery] string? searchTerm = null,
-            [FromQuery] Guid? ownerId = null)
+            [FromQuery] Guid? ownerId = null,
+            [FromQuery] Guid? organizationId = null)
         {
             var query = new ListProjectsQuery
             {
@@ -138,7 +139,8 @@ namespace ApexBuild.Api.Controllers
                 Status = status,
                 ProjectType = projectType,
                 SearchTerm = searchTerm,
-                OwnerId = ownerId
+                OwnerId = ownerId,
+                OrganizationId = organizationId
             };
 
             var response = await _mediator.Send(query);

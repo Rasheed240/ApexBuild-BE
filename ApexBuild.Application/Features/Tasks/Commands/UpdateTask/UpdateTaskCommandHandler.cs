@@ -18,15 +18,18 @@ public class UpdateTaskCommandHandler : IRequestHandler<UpdateTaskCommand, Updat
     private readonly IUnitOfWork _unitOfWork;
     private readonly ICurrentUserService _currentUserService;
     private readonly IDateTimeService _dateTimeService;
+    private readonly ICacheService _cache;
 
     public UpdateTaskCommandHandler(
         IUnitOfWork unitOfWork,
         ICurrentUserService currentUserService,
-        IDateTimeService dateTimeService)
+        IDateTimeService dateTimeService,
+        ICacheService cache)
     {
         _unitOfWork = unitOfWork;
         _currentUserService = currentUserService;
         _dateTimeService = dateTimeService;
+        _cache = cache;
     }
 
     public async Task<UpdateTaskResponse> Handle(UpdateTaskCommand request, CancellationToken cancellationToken)
@@ -185,6 +188,15 @@ public class UpdateTaskCommandHandler : IRequestHandler<UpdateTaskCommand, Updat
 
         await _unitOfWork.Tasks.UpdateAsync(task, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        // ── Cache Invalidation ─────────────────────────────────────────────
+        await Task.WhenAll(
+            _cache.RemoveAsync($"task:{request.TaskId}", cancellationToken),
+            _cache.RemoveByPrefixAsync($"tasks:project:{project.Id}:", cancellationToken),
+            _cache.RemoveByPrefixAsync("tasks:my:", cancellationToken),
+            _cache.RemoveAsync($"project-progress:{project.Id}", cancellationToken),
+            _cache.RemoveAsync($"dashboard:stats:org:{project.OrganizationId}", cancellationToken)
+        );
 
         return new UpdateTaskResponse
         {

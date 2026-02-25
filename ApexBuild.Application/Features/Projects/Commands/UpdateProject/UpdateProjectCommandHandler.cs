@@ -10,13 +10,16 @@ public class UpdateProjectCommandHandler : IRequestHandler<UpdateProjectCommand,
 {
     private readonly IUnitOfWork _unitOfWork;
     private readonly ICurrentUserService _currentUserService;
+    private readonly ICacheService _cache;
 
     public UpdateProjectCommandHandler(
         IUnitOfWork unitOfWork,
-        ICurrentUserService currentUserService)
+        ICurrentUserService currentUserService,
+        ICacheService cache)
     {
         _unitOfWork = unitOfWork;
         _currentUserService = currentUserService;
+        _cache = cache;
     }
 
     public async Task<UpdateProjectResponse> Handle(UpdateProjectCommand request, CancellationToken cancellationToken)
@@ -120,6 +123,14 @@ public class UpdateProjectCommandHandler : IRequestHandler<UpdateProjectCommand,
 
         await _unitOfWork.Projects.UpdateAsync(project, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        // ── Cache Invalidation ─────────────────────────────────────────────
+        await Task.WhenAll(
+            _cache.RemoveAsync($"project:{request.ProjectId}", cancellationToken),
+            _cache.RemoveAsync($"project-progress:{request.ProjectId}", cancellationToken),
+            _cache.RemoveByPrefixAsync("projects:list:", cancellationToken),
+            _cache.RemoveByPrefixAsync($"projects:owner:{project.ProjectOwnerId}", cancellationToken)
+        );
 
         return new UpdateProjectResponse
         {

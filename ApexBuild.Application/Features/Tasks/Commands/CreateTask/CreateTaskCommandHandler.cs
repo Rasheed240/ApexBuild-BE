@@ -11,15 +11,18 @@ public class CreateTaskCommandHandler : IRequestHandler<CreateTaskCommand, Creat
     private readonly IUnitOfWork _unitOfWork;
     private readonly ICurrentUserService _currentUserService;
     private readonly IDateTimeService _dateTimeService;
+    private readonly ICacheService _cache;
 
     public CreateTaskCommandHandler(
         IUnitOfWork unitOfWork,
         ICurrentUserService currentUserService,
-        IDateTimeService dateTimeService)
+        IDateTimeService dateTimeService,
+        ICacheService cache)
     {
         _unitOfWork = unitOfWork;
         _currentUserService = currentUserService;
         _dateTimeService = dateTimeService;
+        _cache = cache;
     }
 
     public async Task<CreateTaskResponse> Handle(CreateTaskCommand request, CancellationToken cancellationToken)
@@ -142,6 +145,16 @@ public class CreateTaskCommandHandler : IRequestHandler<CreateTaskCommand, Creat
 
             await _unitOfWork.SaveChangesAsync(cancellationToken);
         }
+
+        // ── Cache Invalidation ─────────────────────────────────────────────
+        // Evict project-task lists and progress so assignees see new task,
+        // and the progress bar reflects any status recalculation.
+        await Task.WhenAll(
+            _cache.RemoveByPrefixAsync($"tasks:project:{project.Id}:", cancellationToken),
+            _cache.RemoveByPrefixAsync("tasks:my:", cancellationToken),
+            _cache.RemoveAsync($"project-progress:{project.Id}", cancellationToken),
+            _cache.RemoveAsync($"dashboard:stats:org:{project.OrganizationId}", cancellationToken)
+        );
 
         return new CreateTaskResponse
         {

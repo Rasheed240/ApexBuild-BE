@@ -10,13 +10,16 @@ public class CreateProjectCommandHandler : IRequestHandler<CreateProjectCommand,
 {
     private readonly IUnitOfWork _unitOfWork;
     private readonly ICurrentUserService _currentUserService;
+    private readonly ICacheService _cache;
 
     public CreateProjectCommandHandler(
         IUnitOfWork unitOfWork,
-        ICurrentUserService currentUserService)
+        ICurrentUserService currentUserService,
+        ICacheService cache)
     {
         _unitOfWork = unitOfWork;
         _currentUserService = currentUserService;
+        _cache = cache;
     }
 
     public async Task<CreateProjectResponse> Handle(CreateProjectCommand request, CancellationToken cancellationToken)
@@ -99,6 +102,13 @@ public class CreateProjectCommandHandler : IRequestHandler<CreateProjectCommand,
 
         await _unitOfWork.Projects.AddAsync(project, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        // ── Cache Invalidation ─────────────────────────────────────────────
+        // A new project must appear on every project listing immediately.
+        await Task.WhenAll(
+            _cache.RemoveByPrefixAsync("projects:list:", cancellationToken),
+            _cache.RemoveByPrefixAsync($"projects:owner:{currentUserId}", cancellationToken)
+        );
 
         return new CreateProjectResponse
         {

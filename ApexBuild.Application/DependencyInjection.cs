@@ -7,6 +7,7 @@ using ApexBuild.Application.Common.Behaviours;
 using FluentValidation;
 using MediatR;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace ApexBuild.Application
 {
@@ -24,7 +25,9 @@ namespace ApexBuild.Application
             services.AddValidatorsFromAssembly(Assembly.GetExecutingAssembly());
 
             // Register MediatR Pipeline Behaviors
+            // Order matters: Validation runs first, then caching (so we never cache invalid requests)
             services.AddTransient(typeof(IPipelineBehavior<,>), typeof(ValidationBehaviour<,>));
+            services.AddTransient(typeof(IPipelineBehavior<,>), typeof(CachingBehaviour<,>));
 
             // Register AutoMapper
             services.AddAutoMapper(Assembly.GetExecutingAssembly());

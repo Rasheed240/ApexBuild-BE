@@ -8,13 +8,16 @@ public class DeleteProjectCommandHandler : IRequestHandler<DeleteProjectCommand,
 {
     private readonly IUnitOfWork _unitOfWork;
     private readonly ICurrentUserService _currentUserService;
+    private readonly ICacheService _cache;
 
     public DeleteProjectCommandHandler(
         IUnitOfWork unitOfWork,
-        ICurrentUserService currentUserService)
+        ICurrentUserService currentUserService,
+        ICacheService cache)
     {
         _unitOfWork = unitOfWork;
         _currentUserService = currentUserService;
+        _cache = cache;
     }
 
     public async Task<DeleteProjectResponse> Handle(DeleteProjectCommand request, CancellationToken cancellationToken)
@@ -46,6 +49,14 @@ public class DeleteProjectCommandHandler : IRequestHandler<DeleteProjectCommand,
 
         await _unitOfWork.Projects.UpdateAsync(project, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        // ── Cache Invalidation ─────────────────────────────────────────────
+        await Task.WhenAll(
+            _cache.RemoveAsync($"project:{request.ProjectId}", cancellationToken),
+            _cache.RemoveAsync($"project-progress:{request.ProjectId}", cancellationToken),
+            _cache.RemoveByPrefixAsync("projects:list:", cancellationToken),
+            _cache.RemoveByPrefixAsync($"projects:owner:{project.ProjectOwnerId}", cancellationToken)
+        );
 
         return new DeleteProjectResponse
         {

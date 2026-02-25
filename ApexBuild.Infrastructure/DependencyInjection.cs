@@ -24,6 +24,12 @@ namespace ApexBuild.Infrastructure
             // Register Unit of Work
             services.AddScoped<IUnitOfWork, UnitOfWork>();
 
+            // ── Cache ──────────────────────────────────────────────────────────────────
+            // IMemoryCache is registered in Program.cs via AddMemoryCache().
+            // CacheService wraps it with prefix-invalidation and TTL from config.
+            services.Configure<CacheSettings>(configuration.GetSection(CacheSettings.SectionName));
+            services.AddSingleton<ICacheService, CacheService>();
+
             // Register Repositories
             services.AddScoped<IUserRepository, UserRepository>();
             services.AddScoped<IRoleRepository, RoleRepository>();
